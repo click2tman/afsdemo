@@ -1,0 +1,5 @@
+; Information created by apps module.
+
+version = 7.x-3.x-dev
+source_app = lingotek_app
+download_time = 1461203067
