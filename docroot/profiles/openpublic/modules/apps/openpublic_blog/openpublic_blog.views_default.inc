@@ -195,6 +195,29 @@ function openpublic_blog_views_default_views() {
     'default' => 0,
     'block_1' => 0,
   );
+  $translatables['blog_entry_list'] = array(
+    t('Defaults'),
+    t('More blog posts'),
+    t('Apply'),
+    t('Reset'),
+    t('Sort by'),
+    t('Asc'),
+    t('Desc'),
+    t('Items per page'),
+    t('- All -'),
+    t('Offset'),
+    t('« first'),
+    t('‹ previous'),
+    t('next ›'),
+    t('last »'),
+    t('field_author'),
+    t('Read full blog post'),
+    t('Blog entry list page'),
+    t('Blog'),
+    t('more'),
+    t('Front page blogs'),
+    t('Feed'),
+  );
   $export['blog_entry_list'] = $view;
 
   return $export;
