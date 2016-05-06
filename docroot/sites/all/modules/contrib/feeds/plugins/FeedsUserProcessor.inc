@@ -1,15 +1,22 @@
 <?php
-// $Id: FeedsUserProcessor.inc,v 1.22.2.11 2010/12/16 17:21:02 alexb Exp $
 
 /**
  * @file
- * FeedsUserProcessor class.
+ * Contains FeedsUserProcessor.
  */
+
+/**
+ * Option to block users not found in the feed.
+ *
+ * @var string
+ */
+define('FEEDS_BLOCK_NON_EXISTENT', 'block');
 
 /**
  * Feeds processor plugin. Create users from feed items.
  */
 class FeedsUserProcessor extends FeedsProcessor {
+
   /**
    * Define entity type.
    */
@@ -30,10 +37,11 @@ class FeedsUserProcessor extends FeedsProcessor {
    * Creates a new user account in memory and returns it.
    */
   protected function newEntity(FeedsSource $source) {
-    $account = new stdClass();
+    $account = parent::newEntity($source);
     $account->uid = 0;
     $account->roles = array_filter($this->config['roles']);
     $account->status = $this->config['status'];
+
     return $account;
   }
 
@@ -41,13 +49,19 @@ class FeedsUserProcessor extends FeedsProcessor {
    * Loads an existing user.
    */
   protected function entityLoad(FeedsSource $source, $uid) {
-    return user_load($uid);
+    $user = parent::entityLoad($source, $uid);
+
+    // Copy the password so that we can compare it again at save.
+    $user->feeds_original_pass = $user->pass;
+    return $user;
   }
 
   /**
    * Validates a user account.
    */
   protected function entityValidate($account) {
+    parent::entityValidate($account);
+
     if (empty($account->name) || empty($account->mail) || !valid_email_address($account->mail)) {
       throw new FeedsValidationException(t('User name missing or email not valid.'));
     }
@@ -60,8 +74,16 @@ class FeedsUserProcessor extends FeedsProcessor {
     if ($this->config['defuse_mail']) {
       $account->mail = $account->mail . '_test';
     }
-    user_save($account, (array) $account);
-    if ($account->uid && $account->openid) {
+
+    $edit = (array) $account;
+
+    // Remove pass from $edit if the password is unchanged.
+    if (isset($account->feeds_original_pass) && $account->pass == $account->feeds_original_pass) {
+      unset($edit['pass']);
+    }
+
+    user_save($account, $edit);
+    if ($account->uid && !empty($account->openid)) {
       $authmap = array(
         'uid' => $account->uid,
         'module' => 'openid',
@@ -77,9 +99,7 @@ class FeedsUserProcessor extends FeedsProcessor {
    * Delete multiple user accounts.
    */
   protected function entityDeleteMultiple($uids) {
-    foreach ($uids as $uid) {
-      user_delete($uid);
-    }
+    user_delete_multiple($uids);
   }
 
   /**
@@ -117,19 +137,13 @@ class FeedsUserProcessor extends FeedsProcessor {
         '#options' => $roles,
       );
     }
-    // @todo Implement true updating.
-    $form['update_existing'] = array(
-      '#type' => 'checkbox',
-      '#title' => t('Replace existing users'),
-      '#description' => t('If an existing user is found for an imported user, replace it. Existing users will be determined using mappings that are a "unique target".'),
-      '#default_value' => $this->config['update_existing'],
-    );
     $form['defuse_mail'] = array(
       '#type' => 'checkbox',
       '#title' => t('Defuse e-mail addresses'),
       '#description' => t('This appends _test to all imported e-mail addresses to ensure they cannot be used as recipients.'),
       '#default_value' => $this->config['defuse_mail'],
     );
+    $form['update_non_existent']['#options'][FEEDS_BLOCK_NON_EXISTENT] = t('Block non-existent users');
     return $form;
   }
 
@@ -140,6 +154,9 @@ class FeedsUserProcessor extends FeedsProcessor {
     switch ($target_element) {
       case 'created':
         $target_user->created = feeds_to_unixtime($value, REQUEST_TIME);
+        break;
+      case 'language':
+        $target_user->language = strtolower($value);
         break;
       default:
         parent::setTargetElement($source, $target_user, $target_element, $value);
@@ -167,6 +184,18 @@ class FeedsUserProcessor extends FeedsProcessor {
         'name' => t('Created date'),
         'description' => t('The created (e. g. joined) data of the user.'),
        ),
+      'pass' => array(
+        'name' => t('Unencrypted Password'),
+        'description' => t('The unencrypted user password.'),
+      ),
+      'status' => array(
+        'name' => t('Account status'),
+        'description' => t('Whether a user is active or not. 1 stands for active, 0 for blocked.'),
+      ),
+      'language' => array(
+        'name' => t('User language'),
+        'description' => t('Default language for the user.'),
+      ),
     );
     if (module_exists('openid')) {
       $targets['openid'] = array(
@@ -176,9 +205,7 @@ class FeedsUserProcessor extends FeedsProcessor {
        );
     }
 
-    // Let other modules expose mapping targets.
-    self::loadMappers();
-    feeds_alter('feeds_processor_targets', $targets, 'user', 'user');
+    $this->getHookTargets($targets);
 
     return $targets;
   }
@@ -212,4 +239,35 @@ class FeedsUserProcessor extends FeedsProcessor {
     }
     return 0;
   }
+
+  /**
+   * Overrides FeedsProcessor::clean().
+   *
+   * Block users instead of deleting them.
+   *
+   * @param FeedsState $state
+   *   The FeedsState object for the given stage.
+   */
+  protected function clean(FeedsState $state) {
+    // Delegate to parent if not blocking or option not set.
+    if (!isset($this->config['update_non_existent']) || $this->config['update_non_existent'] !== FEEDS_BLOCK_NON_EXISTENT) {
+      return parent::clean($state);
+    }
+
+    if (!empty($state->removeList)) {
+      // @see user_user_operations_block().
+      // The following foreach is copied from above function but with an added
+      // counter to count blocked users.
+      foreach (user_load_multiple($state->removeList) as $account) {
+        $this->loadItemInfo($account);
+        $account->feeds_item->hash = $this->config['update_non_existent'];
+        // For efficiency manually save the original account before applying any
+        // changes.
+        $account->original = clone $account;
+        user_save($account, array('status' => 0));
+        $state->blocked++;
+      }
+    }
+  }
+
 }

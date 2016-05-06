@@ -1,5 +1,4 @@
 <?php
-// $Id: FeedsFileFetcher.inc,v 1.22.2.8 2010/12/22 00:49:07 alexb Exp $
 
 /**
  * @file
@@ -20,7 +19,7 @@ class FeedsFileFetcherResult extends FeedsFetcherResult {
   }
 
   /**
-   * Overrides parent::getRaw();
+   * Overrides parent::getRaw().
    */
   public function getRaw() {
     return $this->sanitizeRaw(file_get_contents($this->file_path));
@@ -30,7 +29,7 @@ class FeedsFileFetcherResult extends FeedsFetcherResult {
    * Overrides parent::getFilePath().
    */
   public function getFilePath() {
-    if (!file_exists($this->file_path)) {
+    if (!is_readable($this->file_path)) {
       throw new Exception(t('File @filepath is not accessible.', array('@filepath' => $this->file_path)));
     }
     return $this->sanitizeFile($this->file_path);
@@ -70,25 +69,25 @@ class FeedsFileFetcher extends FeedsFetcher {
   }
 
   /**
-   * Return an array of files in a directory.
+   * Returns an array of files in a directory.
    *
-   * @param $dir
+   * @param string $dir
    *   A stream wreapper URI that is a directory.
    *
-   * @return
-   *   An array of stream wrapper URIs pointing to files. The array is empty
-   *   if no files could be found. Never contains directories.
+   * @return array
+   *   An array of stream wrapper URIs pointing to files. The array is empty if
+   *   no files could be found. Never contains directories.
    */
   protected function listFiles($dir) {
-    $dir = file_stream_wrapper_uri_normalize($dir);
+    // Seperate out string into array of extensions. Make sure its regex safe.
+    $config = $this->getConfig();
+    $extensions = array_filter(array_map('preg_quote', explode(' ', $config['allowed_extensions'])));
+    $regex = '/\.(' . implode('|', $extensions) . ')$/';
     $files = array();
-    if ($items = @scandir($dir)) {
-      foreach ($items as $item) {
-        if (is_file("$dir/$item") && strpos($item, '.') !== 0) {
-          $files[] = "$dir/$item";
-        }
-      }
+    foreach (file_scan_directory($dir, $regex) as $file) {
+      $files[] = $file->uri;
     }
+
     return $files;
   }
 
@@ -110,7 +109,7 @@ class FeedsFileFetcher extends FeedsFetcher {
         '#type' => 'file',
         '#title' => empty($this->config['direct']) ? t('File') : NULL,
         '#description' => empty($source_config['source']) ? t('Select a file from your local system.') : t('Select a different file from your local system.'),
-        '#theme' => 'feeds_upload',
+        '#theme_wrappers' => array('feeds_upload'),
         '#file_info' => empty($source_config['fid']) ? NULL : file_load($source_config['fid']),
         '#size' => 10,
       );
@@ -119,7 +118,7 @@ class FeedsFileFetcher extends FeedsFetcher {
       $form['source'] = array(
         '#type' => 'textfield',
         '#title' => t('File'),
-        '#description' => t('Specify a path to a file or a directory. Path must start with @scheme://', array('@scheme' => file_default_scheme())),
+        '#description' => t('Specify a path to a file or a directory. Prefix the path with a scheme. Available schemes: @schemes.', array('@schemes' => implode(', ', $this->config['allowed_schemes']))),
         '#default_value' => empty($source_config['source']) ? '' : $source_config['source'],
       );
     }
@@ -127,32 +126,53 @@ class FeedsFileFetcher extends FeedsFetcher {
   }
 
   /**
-   * Override parent::sourceFormValidate().
+   * Overrides parent::sourceFormValidate().
    */
   public function sourceFormValidate(&$values) {
-    $feed_dir = 'public://feeds';
-    file_prepare_directory($feed_dir, FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS);
+    $values['source'] = trim($values['source']);
 
-    // If there is a file uploaded, save it, otherwise validate input on
-    // file.
-    // @todo: Track usage of file, remove file when removing source.
-    if ($file = file_save_upload('feeds', array('file_validate_extensions' => array(0 => $this->config['allowed_extensions'])), $feed_dir)) {
-      $values['source'] = $file->uri;
-      $values['file'] = $file;
+    if (empty($this->config['direct'])) {
+
+      $feed_dir = $this->config['directory'];
+
+      if (!file_prepare_directory($feed_dir, FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS)) {
+        if (user_access('administer feeds')) {
+          $plugin_key = feeds_importer($this->id)->config[$this->pluginType()]['plugin_key'];
+          $link = url('admin/structure/feeds/' . $this->id . '/settings/' . $plugin_key);
+          form_set_error('feeds][FeedsFileFetcher][source', t('Upload failed. Please check the upload <a href="@link">settings.</a>', array('@link' => $link)));
+        }
+        else {
+          form_set_error('feeds][FeedsFileFetcher][source', t('Upload failed. Please contact your site administrator.'));
+        }
+        watchdog('feeds', 'The upload directory %directory required by a feed could not be created or is not accessible. A newly uploaded file could not be saved in this directory as a consequence, and the upload was canceled.', array('%directory' => $feed_dir));
+      }
+      // Validate and save uploaded file.
+      elseif ($file = file_save_upload('feeds', array('file_validate_extensions' => array(0 => $this->config['allowed_extensions'])), $feed_dir)) {
+        $values['source'] = $file->uri;
+        $values['file'] = $file;
+      }
+      elseif (empty($values['source'])) {
+        form_set_error('feeds][FeedsFileFetcher][source', t('Please upload a file.'));
+      }
+      else {
+        // File present from previous upload. Nothing to validate.
+      }
     }
-    elseif (empty($values['source'])) {
-      form_set_error('feeds][source', t('Upload a file first.'));
-    }
-    // If a file has not been uploaded and $values['source'] is not empty, make
-    // sure that this file is within Drupal's files directory as otherwise
-    // potentially any file that the web server has access to could be exposed.
-    elseif (strpos($values['source'], file_default_scheme()) !== 0) {
-      form_set_error('feeds][source', t('File needs to reside within the site\'s file directory, its path needs to start with @scheme://.', array('@scheme' => file_default_scheme())));
+    else {
+      // Check if chosen url scheme is allowed.
+      $scheme = file_uri_scheme($values['source']);
+      if (!$scheme || !in_array($scheme, $this->config['allowed_schemes'])) {
+        form_set_error('feeds][FeedsFileFetcher][source', t("The file needs to reside within the site's files directory, its path needs to start with scheme://. Available schemes: @schemes.", array('@schemes' => implode(', ', $this->config['allowed_schemes']))));
+      }
+      // Check whether the given path is readable.
+      elseif (!is_readable($values['source'])) {
+        form_set_error('feeds][FeedsFileFetcher][source', t('The specified file or directory does not exist.'));
+      }
     }
   }
 
   /**
-   * Override parent::sourceSave().
+   * Overrides parent::sourceSave().
    */
   public function sourceSave(FeedsSource $source) {
     $source_config = $source->getConfigFor($this);
@@ -175,7 +195,7 @@ class FeedsFileFetcher extends FeedsFetcher {
   }
 
   /**
-   * Override parent::sourceDelete().
+   * Overrides parent::sourceDelete().
    */
   public function sourceDelete(FeedsSource $source) {
     $source_config = $source->getConfigFor($this);
@@ -185,44 +205,145 @@ class FeedsFileFetcher extends FeedsFetcher {
   }
 
   /**
-   * Override parent::configDefaults().
+   * Overrides parent::configDefaults().
    */
   public function configDefaults() {
+    $schemes = $this->getSchemes();
+    $scheme = in_array('private', $schemes) ? 'private' : 'public';
+
     return array(
       'allowed_extensions' => 'txt csv tsv xml opml',
       'direct' => FALSE,
+      'directory' => $scheme . '://feeds',
+      'allowed_schemes' => $schemes,
     );
   }
 
   /**
-   * Override parent::configForm().
+   * Overrides parent::configForm().
    */
   public function configForm(&$form_state) {
     $form = array();
     $form['allowed_extensions'] = array(
-      '#type' =>'textfield',
+      '#type' => 'textfield',
       '#title' => t('Allowed file extensions'),
       '#description' => t('Allowed file extensions for upload.'),
       '#default_value' => $this->config['allowed_extensions'],
     );
     $form['direct'] = array(
-      '#type' =>'checkbox',
+      '#type' => 'checkbox',
       '#title' => t('Supply path to file or directory directly'),
       '#description' => t('For experts. Lets users specify a path to a file <em>or a directory of files</em> directly,
         instead of a file upload through the browser. This is useful when the files that need to be imported
         are already on the server.'),
       '#default_value' => $this->config['direct'],
     );
+    $form['directory'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Upload directory'),
+      '#description' => t('Directory where uploaded files get stored. Prefix the path with a scheme. Available schemes: @schemes.', array('@schemes' => implode(', ', $this->getSchemes()))),
+      '#default_value' => $this->config['directory'],
+      '#states' => array(
+        'visible' => array(':input[name="direct"]' => array('checked' => FALSE)),
+        'required' => array(':input[name="direct"]' => array('checked' => FALSE)),
+      ),
+    );
+    if ($options = $this->getSchemeOptions()) {
+      $form['allowed_schemes'] = array(
+        '#type' => 'checkboxes',
+        '#title' => t('Allowed schemes'),
+        '#default_value' => $this->config['allowed_schemes'],
+        '#options' => $options,
+        '#description' => t('Select the schemes you want to allow for direct upload.'),
+        '#states' => array(
+          'visible' => array(':input[name="direct"]' => array('checked' => TRUE)),
+        ),
+      );
+    }
+
     return $form;
   }
 
   /**
-   * Helper. Deletes a file.
+   * Overrides parent::configFormValidate().
+   *
+   * Ensure that the chosen directory is accessible.
+   */
+  public function configFormValidate(&$values) {
+
+    $values['directory'] = trim($values['directory']);
+    $values['allowed_schemes'] = array_filter($values['allowed_schemes']);
+
+    if (!$values['direct']) {
+      // Ensure that the upload directory field is not empty when not in
+      // direct-mode.
+      if (!$values['directory']) {
+        form_set_error('directory', t('Please specify an upload directory.'));
+        // Do not continue validating the directory if none was specified.
+        return;
+      }
+
+      // Validate the URI scheme of the upload directory.
+      $scheme = file_uri_scheme($values['directory']);
+      if (!$scheme || !in_array($scheme, $this->getSchemes())) {
+        form_set_error('directory', t('Please enter a valid scheme into the directory location.'));
+
+        // Return here so that attempts to create the directory below don't
+        // throw warnings.
+        return;
+      }
+
+      // Ensure that the upload directory exists.
+      if (!file_prepare_directory($values['directory'], FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS)) {
+        form_set_error('directory', t('The chosen directory does not exist and attempts to create it failed.'));
+      }
+    }
+  }
+
+  /**
+   * Deletes a file.
+   *
+   * @param int $fid
+   *   The file id.
+   * @param int $feed_nid
+   *   The feed node's id, or 0 if a standalone feed.
+   *
+   * @return bool|array
+   *   TRUE for success, FALSE in the event of an error, or an array if the file
+   *   is being used by any modules.
+   *
+   * @see file_delete()
    */
   protected function deleteFile($fid, $feed_nid) {
     if ($file = file_load($fid)) {
       file_usage_delete($file, 'feeds', get_class($this), $feed_nid);
-      file_delete($file);
+      return file_delete($file);
     }
+    return FALSE;
   }
+
+  /**
+   * Returns available schemes.
+   *
+   * @return array
+   *   The available schemes.
+   */
+  protected function getSchemes() {
+    return array_keys(file_get_stream_wrappers(STREAM_WRAPPERS_WRITE_VISIBLE));
+  }
+
+  /**
+   * Returns available scheme options for use in checkboxes or select list.
+   *
+   * @return array
+   *   The available scheme array keyed scheme => description
+   */
+  protected function getSchemeOptions() {
+    $options = array();
+    foreach (file_get_stream_wrappers(STREAM_WRAPPERS_WRITE_VISIBLE) as $scheme => $info) {
+      $options[$scheme] = check_plain($scheme . ': ' . $info['description']);
+    }
+    return $options;
+  }
+
 }

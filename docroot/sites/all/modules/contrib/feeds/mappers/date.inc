@@ -1,5 +1,4 @@
 <?php
-// $Id: date.inc,v 1.4.2.3 2010/10/28 18:26:26 alexb Exp $
 
 /**
  * @file
@@ -7,59 +6,57 @@
  */
 
 /**
- * Implements hook_feeds_processor_targets_alter().
- *
- * @see FeedsNodeProcessor::getMappingTargets().
+ * Implements hook_feeds_processor_targets().
  *
  * @todo Only provides "end date" target if field allows it.
  */
-function date_feeds_processor_targets_alter(&$targets, $entity_type, $bundle_name) {
+function date_feeds_processor_targets($entity_type, $bundle_name) {
+  $targets = array();
+
   foreach (field_info_instances($entity_type, $bundle_name) as $name => $instance) {
     $info = field_info_field($name);
     if (in_array($info['type'], array('date', 'datestamp', 'datetime'))) {
       $targets[$name . ':start'] = array(
-        'name' => $instance['label'] . ': Start',
+        'name' => t('@name: Start', array('@name' => $instance['label'])),
         'callback' => 'date_feeds_set_target',
-        'description' => t('The start date for the @name field. Also use if mapping both start and end.',
-          array('@name' => $instance['label'])),
+        'description' => t('The start date for the @name field. Also use if mapping both start and end.', array('@name' => $instance['label'])),
         'real_target' => $name,
       );
       $targets[$name . ':end'] = array(
-        'name' => $instance['label'] . ': End',
+        'name' => t('@name: End', array('@name' => $instance['label'])),
         'callback' => 'date_feeds_set_target',
         'description' => t('The end date for the @name field.', array('@name' => $instance['label'])),
         'real_target' => $name,
       );
     }
   }
+
+  return $targets;
 }
 
 /**
- * Implements hook_feeds_set_target().
- *
- * @param $node
- *   The target node.
- * @param $field_name
- *   The name of field on the target node to map to.
- * @param $feed_element
- *   The value to be mapped. Should be either a (flexible) date string
- *   or a FeedsDateTimeElement object.
- *
- * @todo Support array of values for dates.
+ * Callback for setting date values.
  */
-function date_feeds_set_target($source, $entity, $target, $feed_element) {
+function date_feeds_set_target(FeedsSource $source, $entity, $target, array $values, array $mapping) {
   list($field_name, $sub_field) = explode(':', $target, 2);
-  if (!($feed_element instanceof FeedsDateTimeElement)) {
-    if (is_array($feed_element)) {
-      $feed_element = $feed_element[0];
-    }
-    if ($sub_field == 'end') {
-      $feed_element = new FeedsDateTimeElement(NULL, $feed_element);
-    }
-    else {
-      $feed_element = new FeedsDateTimeElement($feed_element, NULL);
-    }
-  }
-  $feed_element->buildDateField($entity, $field_name);
 
+  $delta = 0;
+  foreach ($values as $value) {
+
+    if (!($value instanceof FeedsDateTimeElement)) {
+
+      if (empty($value) || !is_numeric($value) && is_string($value) && !date_create($value)) {
+        $value = new FeedsDateTimeElement(NULL, NULL);
+      }
+      elseif ($sub_field == 'end') {
+        $value = new FeedsDateTimeElement(NULL, $value);
+      }
+      else {
+        $value = new FeedsDateTimeElement($value, NULL);
+      }
+    }
+
+    $value->buildDateField($entity, $field_name, $delta, $mapping['language']);
+    $delta++;
+  }
 }

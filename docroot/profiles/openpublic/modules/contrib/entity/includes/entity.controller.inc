@@ -447,7 +447,6 @@ class EntityAPIController extends DrupalDefaultEntityController implements Entit
         if ($this->revisionKey) {
           $this->saveRevision($entity);
         }
-        $this->cacheComplete = FALSE;
         $this->invoke('insert', $entity);
       }
       else {

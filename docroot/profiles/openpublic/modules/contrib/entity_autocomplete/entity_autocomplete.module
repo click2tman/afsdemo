@@ -175,7 +175,11 @@ function entity_autocomplete_element_process($element, $form_state) {
       $element['#value'] = entity_autocomplete_element_label($element['#value'], $element['#entity_type']);
     }
   }
-  
+
+    // Function form_process_autocomplete() was added to core in v7.39.
+    if (function_exists('form_process_autocomplete')) {
+      $element = form_process_autocomplete($element);
+    }
   return $element;
 }
 

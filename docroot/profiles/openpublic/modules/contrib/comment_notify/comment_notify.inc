@@ -270,7 +270,7 @@ function comment_notify_unsubscribe_by_hash($hash) {
     $result = db_query("SELECT c.cid
       FROM {comment} c, (
         SELECT oc.nid, oc.uid
-        FROM {comment} AS oc, comment_notify AS ocn
+        FROM {comment} AS oc, {comment_notify} AS ocn
         WHERE oc.cid = ocn.cid
         AND ocn.notify_hash = :hash
       ) AS o
@@ -312,14 +312,14 @@ function comment_notify_unsubscribe_by_hash($hash) {
 function comment_notify_variable_registry_get($name) {
   $variables = array();
   $variables['author_subject'] = t('[site:name] :: new comment for your post.');
-  $variables['available_alerts'] = drupal_map_assoc(array(COMMENT_NOTIFY_NODE, COMMENT_NOTIFY_COMMENT));
+  $variables['available_alerts'] = array(COMMENT_NOTIFY_NODE, COMMENT_NOTIFY_COMMENT);
   $variables['default_anon_mailalert'] = COMMENT_NOTIFY_NODE;
   $variables['node_notify_default_mailtext'] = AUTHOR_MAILTEXT;
   $variables['default_registered_mailalert'] = COMMENT_NOTIFY_DISABLED;
   $variables['node_notify_default_mailalert'] = 0;
   $variables['watcher_subject'] = '[site:name] :: new comment on [comment:node:title]';
   $variables['comment_notify_default_mailtext'] = DEFAULT_MAILTEXT;
-  $variables['node_types'] = drupal_map_assoc(array_keys(node_type_get_types()));
+  $variables['node_types'] = array('article' => 'article');
 
   // Errors
   $variables['error_anonymous_email_missing'] = 'If you want to subscribe to comments you must supply a valid e-mail address.';

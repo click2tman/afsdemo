@@ -1,5 +1,4 @@
 <?php
-// $Id: link.inc,v 1.5.2.1 2010/11/01 16:58:21 tristanoneil Exp $
 
 /**
  * @file
@@ -7,72 +6,57 @@
  */
 
 /**
- * Implements hook_feeds_processor_targets_alter().
- *
- * @see FeedsNodeProcessor::getMappingTargets().
+ * Implements hook_feeds_processor_targets().
  */
-function link_feeds_processor_targets_alter(&$targets, $entity_type, $bundle_name) {
+function link_feeds_processor_targets($entity_type, $bundle_name) {
+  $targets = array();
+
   foreach (field_info_instances($entity_type, $bundle_name) as $name => $instance) {
     $info = field_info_field($name);
     if ($info['type'] == 'link_field') {
       if (array_key_exists('url', $info['columns'])) {
         $targets[$name . ':url'] = array(
-          'name' => $instance['label'] . ' URL',
+          'name' => t('@name: URL', array('@name' => $instance['label'])),
           'callback' => 'link_feeds_set_target',
-          'description' => t('The @label field of the node.', array('@label' => $instance['label'])),
+          'description' => t('The @label field of the entity.', array('@label' => $instance['label'])),
+          'real_target' => $name,
         );
       }
       if (array_key_exists('title', $info['columns'])) {
         $targets[$name . ':title'] = array(
-          'name' => $instance['label'] . ' Title',
+          'name' => t('@name: Title', array('@name' => $instance['label'])),
           'callback' => 'link_feeds_set_target',
-          'description' => t('The @label field of the node.', array('@label' => $instance['label'])),
+          'description' => t('The @label field of the entity.', array('@label' => $instance['label'])),
+          'real_target' => $name,
         );
       }
     }
   }
+
+  return $targets;
 }
 
 /**
- * Callback for mapping. Here is where the actual mapping happens.
- *
- * When the callback is invoked, $target contains the name of the field the
- * user has decided to map to and $value contains the value of the feed item
- * element the user has picked as a source.
+ * Callback for mapping link fields.
  */
-function link_feeds_set_target($source, $entity, $target, $value) {
-  if (empty($value)) {
-    return;
+function link_feeds_set_target(FeedsSource $source, $entity, $target, array $values, array $mapping) {
+  $language = $mapping['language'];
+
+  list($field_name, $column) = explode(':', $target);
+
+  $field = isset($entity->$field_name) ? $entity->$field_name : array($language => array());
+  $delta = 0;
+
+  foreach ($values as $value) {
+    if (is_object($value) && ($value instanceof FeedsElement)) {
+      $value = $value->getValue();
+    }
+
+    if (is_scalar($value)) {
+      $field[$language][$delta][$column] = (string) $value;
+    }
+    $delta++;
   }
 
-  // Handle non-multiple value fields.
-  if (!is_array($value)) {
-    $value = array($value);
-  }
-
-  // Iterate over all values.
-  $i = 0;
-  $info = field_info_field($target);
-  list($field_name, $sub_field) = explode(':', $target);
-  foreach ($value as $v) {
-    if (!is_array($v) && !is_object($v)) {
-      if (strstr($target, 'url')) {
-        if(isset($entity->{$field_name}['und'][$i]['title'])) {
-          $field['und'][$i]['title'] = $entity->{$field_name}['und'][$i]['title'];
-        }
-        $field['und'][$i]['url'] = $v;
-      }
-      elseif (strstr($target, 'title')) {
-        if(isset($entity->{$field_name}['und'][$i]['url'])) {
-          $field['und'][$i]['url'] = $entity->{$field_name}['und'][$i]['url'];
-        }
-        $field['und'][$i]['title'] = $v;
-      }
-    }
-    if ($info['cardinality'] == 1) {
-      break;
-    }
-    $i++;
-  }
-  $entity->{$field_name} = $field;
+  $entity->$field_name = $field;
 }

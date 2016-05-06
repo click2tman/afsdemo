@@ -1,5 +1,4 @@
 <?php
-// $Id: openlayers_views_style_data.inc,v 1.1.2.27.2.17 2010/12/08 19:56:51 tmcw Exp $
 
 /**
  * @file
@@ -16,8 +15,43 @@
  * a style plugin for the Open Layers module.
  */
 class openlayers_views_style_data extends views_plugin_style {
+
+   /**
+   * Render the map features.
+   *
+   * Overrides views_plugin_style->render
+   */
+  function render() {
+    $grouped_results = $this->render_grouping($this->view->result, $this->options['grouping']);
+    $data = $this->map_features($grouped_results);
+
+    // If we are not in preview, just return the data
+    if (empty($this->view->live_preview)) {
+      return $data;
+    }
+    else {
+      // If we are in preview mode, dump out some useful information about this data layer
+      $output = "You can use the following parameters in your styles as dynamic values";
+      $output .= "\n------------\n";
+      if (!empty($data)) {
+        $keys = array_keys($data);
+        foreach ($data[$keys[0]]['attributes'] as $key => $value) {
+          $output .= '${' . $key . "}\n";
+        }
+      }
+      $output .= "\n------------\n";
+
+      $output .= t('The following is a dump of the data that is rendered from this display. It is used for debugging purposes only.') . '
+        ' . var_export($data, TRUE);
+
+      return $output;
+    }
+  }
+
   /**
    * Set default options
+   *
+   * Overrides views_plugin_style->option_definition
    */
   function option_definition() {
     $options = parent::option_definition();
@@ -26,17 +60,9 @@ class openlayers_views_style_data extends views_plugin_style {
   }
 
   /**
-   * Basically a macro because
-   * #state is rather verbose
-   */
-  function datasource_dependent($type) {
-    return array('visible' => array(
-        '#edit-style-options-data-source-value' => 
-            array('value' => $type)));
-  }
-
-  /**
    * Options form
+   *
+   * Overrides views_plugin_style->options_form
    */
   function options_form(&$form, &$form_state) {
     parent::options_form($form, $form_state);
@@ -47,7 +73,7 @@ class openlayers_views_style_data extends views_plugin_style {
     // Check for any fields, as the view needs them
     if (empty($handlers)) {
       $form['error_markup'] = array(
-          '#value' => t('You need to enable at least one field before you can '
+        '#value' => t('You need to enable at least one field before you can '
           . 'configure your field settings'),
         '#prefix' => '<div class="error form-item description">',
         '#suffix' => '</div>',
@@ -57,17 +83,7 @@ class openlayers_views_style_data extends views_plugin_style {
 
     $fields = array();
     foreach ($handlers as $field_id => $handler) {
-        if ($handler->content_field['type'] == 'openlayers_wkt' &&
-          $handler->options['format'] !== 'openlayers_wkt'
-        ) {
-          form_set_error('', t('WKT Field %field not available 
-            because it is formatted as a map. Set its format to WKT Value to 
-            make it available.', array(
-                '%field' => $handler->definition['title'])));
-        }
-        else {
-          $fields[$field_id] = $handler->definition['title'];
-        }
+      $fields[$field_id] = $handler->ui_name() . ' (' . $field_id .')';
     }
 
     $form['data_source'] = array(
@@ -83,13 +99,12 @@ class openlayers_views_style_data extends views_plugin_style {
       '#description' => t('Choose which sources of data that the map will '
       . 'provide features for.'),
       '#options' => array(
-        'other_latlon' => t('Other: Lat/Lon Point'),
-        'other_boundingbox' => t('Other: Bounding Box'),
+        'other_latlon' => t('Lat/Lon Pair'),
+        'other_boundingbox' => t('Bounding Box'),
         'wkt' => t('WKT')
       ),
       '#default_value' => $this->options['data_source']['value'],
     );
-
     if (count($fields > 0)) {
       $form['data_source']['other_lat'] = array(
         '#type' => 'select',
@@ -149,31 +164,39 @@ class openlayers_views_style_data extends views_plugin_style {
       $form['data_source']['other_left'] = array(
         '#type' => 'select',
         '#title' => t('Left Field'),
-        '#description' => t('Choose a field for Left.  This should be a field '
-        . 'that is a decimal or float value.'),
+        '#description' => t('Choose a field for Left.  This should be a field ' .
+          'that is a decimal or float value.'),
         '#options' => $fields,
         '#default_value' => $this->options['data_source']['other_left'],
         '#states' => $this->datasource_dependent('other_boundingbox')
       );
     }
     $form['data_source']['name_field'] = array(
-        '#type' => 'select',
-        '#title' => t('Title Field'),
-        '#description' => t('Choose the field which will appear as a title on '
-        . 'tooltips.'),
-        '#options' => array_merge(array('' => ''), $fields),
-        '#default_value' => $this->options['data_source']['name_field'],
-    );
-    $form['data_source']['description_field'] = array(
-        '#type' => 'select',
-        '#title' => t('Description Field'),
-        '#description' => t('Choose the field which will appear as a '
-        . 'description on tooltips.'),
-        '#required' => FALSE,
-        '#options' => array_merge(array('' => ''), $fields),
-        '#default_value' => $this->options['data_source']['description_field'],
+      '#type' => 'select',
+      '#title' => t('Title Field'),
+      '#description' => t('Choose the field which will appear as a title on ' .
+        'tooltips.'),
+      '#options' => array_merge(array('' => ''), $fields),
+      '#default_value' => $this->options['data_source']['name_field'],
     );
 
+    $desc_options = array_merge(array(
+      '' => '',
+      '#row' => '<' . t('entire row') . '>',
+    ), $fields);
+
+    // Description field
+    $form['data_source']['description_field'] = array(
+      '#type' => 'select',
+      '#title' => t('Description Content'),
+      '#description' => t('Choose the field or rendering method which will
+        appear as a description on tooltips or popups.'),
+      '#required' => FALSE,
+      '#options' => $desc_options,
+      '#default_value' => $this->options['data_source']['description_field'],
+    );
+
+    // A simple way to display attributes and styling
     $form['attributes'] = array(
       '#type' => 'fieldset',
       '#title' => t('Attributes and Styling'),
@@ -183,144 +206,44 @@ class openlayers_views_style_data extends views_plugin_style {
       '#collapsed' => TRUE,
     );
     $variable_fields = array();
+    foreach ($this->view->display_handler->get_handlers('field') as
+             $field => $handler) {
+        $variable_fields[$field] = '${' . $field . '}';
+    }
     if (!empty($this->options['data_source']['name_field'])) {
       $variable_fields['name'] = '${name}';
     }
     if (!empty($this->options['data_source']['description_field'])) {
       $variable_fields['description'] = '${description}';
     }
-    foreach ($this->view->display_handler->get_handlers('field') as
-      $field => $handler) {
-          if (($field != $this->options['data_source']['name_field']) &&
-              ($field != $this->options['data_source']['description_field'])) {
-        $variable_fields[$field] = '${' . $field . '}';
-        $variable_fields[$field . '_rendered'] = '${' . $field . '_rendered}';
-      }
-    }
-    $form['attributes']['styling'] = array(
-      '#markup' => '
-      <p>' . t('Any fields that you add to this view will be attached to '
-      . 'their respective feature (point, line, polygon) as attributes.  '
-      . 'These attributes can then be used to add variable styling to your '
-      . 'themes.  This is accomplished by using the %syntax syntax in the '
-      . 'values for a style.  The following is a list of formatted variables '
-      . 'that are currently available; these can be placed right in the style '
-      . 'interface.  The %rendered one means that it has been processed '
-      . 'by Views and may have a different value.',
-      array(
-        '%syntax' => '${field_name}',
-        '%rendered' => '_rendered'))
-      . '</p>'
-      . theme('item_list', $variable_fields)
-      . '<p>'
-      . t('Please note that this does not apply to Grouped Displays.')
-      . '</p>',
+
+    $form['attributes']['display'] = array(
+      '#title' => 'Select attributes to include in the features',
+      '#type' => 'checkboxes',
+      '#options' => $variable_fields,
+      '#default_value' => !empty($this->options['attributes']['display']) ?
+          $this->options['attributes']['display'] : array_combine(array_keys($variable_fields), array_keys($variable_fields)),
+      '#description' => t('Any fields that you select will be attached to '
+          . 'their respective feature (point, line, polygon) as attributes.  '
+          . 'These attributes can then be used to add variable styling to your '
+          . 'themes.  This is accomplished by using the %syntax syntax in the '
+          . 'values for a style.  You can see a list of available variables in '
+          . 'the view preview; these can be placed right in the style interface. '
+          . 'The field has been processed by Views.'
+          . 'By disabling some of them, you can reduce the size '
+          . 'of the Javascript included in your pages.'
+          . 'Please note that this does not apply to Grouped Displays.',
+          array(
+            '%syntax' => '${field_name}'
+          ))
     );
   }
 
-  /**
-   * Find the data source of an element and pull it into a
-   * wkt field
-   */
-  function coalesce_wkt($feature, $handlers, $ds) {
-    $feature['projection'] = '4326';
-    switch ($ds['value']) {
-      case 'wkt':
-        $feature['wkt'] = $feature[
-          $handlers[$ds['wkt']]->field_alias . '_rendered'];
-        break;
-    }
-    return $feature;
-  }
-
-  /**
-   * Coalesce features into single grouped feature when
-   * grouping is enabled.
-   */
-  function coalesce_groups($features, $handlers, $ds) {
-    foreach ($features as $k => &$f) {
-      $f['attributes']['name'] = $k;
-
-      $formatted_features = array();
-      foreach ($f['features'] as $feature) {
-        $formatted_features[] = theme('openlayers_views_group_display_item',
-          array(
-            'name' => isset($handlers[
-                $ds['name_field']]) ?
-              $feature[
-              $handlers[
-                $ds['name_field']
-              ]->field_alias . '_rendered'] : false,
-            'description' => isset($handlers[
-                $ds['description_field']]) ?
-              $feature[
-              $handlers[
-                $ds['description_field']
-              ]->field_alias . '_rendered'] : false
-          )
-        );
-      }
-      $f['attributes']['description'] = theme('item_list',
-        array(
-          'items' => $formatted_features
-        )
-      );
-    }
-    return $features;
-  }
-
-  /**
-   * Retrieve name and description for individual features when
-   * grouping is not enabled.
-   */
-  function coalesce_features($features, $handlers, $ds) {
-    foreach ($features as $k => &$f) {
-      $f['attributes']['name'] = isset($handlers[$ds['name_field']])
-        ? $f['attributes'][$handlers[$ds['name_field']]->field_alias . '_rendered']
-        : false;
-      $f['attributes']['description'] = isset($handlers[$ds['description_field']])
-        ? $f['attributes'][$handlers[$ds['description_field']]->field_alias . '_rendered']
-        : false;
-    }
-    return $features;
-  }
-
-  /**
-   * Basically an algebraic reduction; given whether to group,
-   * a feature, a list of features, etc., return a full $features
-   * array with the element added, either straight non-grouped, 
-   * or within a new or existing group
-   */
-  function reduce_features($is_grouped, $features, $feature, $group) {
-    if ($is_grouped) {
-      if (isset($features[$group])) {
-        $features[$group]['attributes']['count']++;
-        $features[$group]['features'][] = $feature;
-        return $features;
-      }
-      else {
-        $features[$group] = array(
-          'attributes' => array('count' => 1),
-          'wkt' => $feature['wkt'],
-          'projection' => $feature['projection'],
-          'features' => array($feature)
-        );
-        return $features;
-      }
-    }
-    else {
-      array_push($features, array(
-        'attributes' => $feature,
-        'wkt' => $feature['wkt'],
-        'projection' => $feature['projection'],
-        'features' => array($feature)
-      ));;
-      return $features;
-    }
-  }
 
   /**
    * @param $records ...
+   *
+   * openlayers_views_style_data specific
    */
   function map_features($sets = array()) {
     $features = $excluded_fields = array();
@@ -328,50 +251,217 @@ class openlayers_views_style_data extends views_plugin_style {
 
     foreach ($sets as $title => $records) {
       foreach ($records as $id => $record) {
+        $this->view->row_index = $id;
+        $attributes = array();
+        $wkt = NULL;
+        $field_exclude = array();
+
+        // Save the 'exclude' options of fields as backup.
+        foreach ($this->view->field as $fid => $field) {
+          $field_exclude[$fid] = $field->options['exclude'];
+        }
+        // Loop through each fields and render it if there were only one
+        // field in the row, so we have all the goodness of Views's field
+        // wrapping, class customizations and label.
         foreach ($handlers as $hid => $handler) {
-          if (!empty($handler->options['exclude'])) {
-            $excluded_fields[] = $handler->field_alias;
+          $field_id = $handler->options['id'];
+          // Exclude all the field from rendering
+          foreach ($this->view->field as $field) {
+            $field->options['exclude'] = TRUE;
           }
-          else {
-            $feature[$handler->field_alias] =
-              isset($record->{$handler->field_alias})
-              ? $record->{$handler->field_alias}
-              : NULL;
-            $feature[$handler->field_alias . '_rendered'] =
-              $handler->allow_advanced_render()
-              ? $handler->advanced_render($record)
-              : $handler->render($record);
+          // Enable only the field we want to render the row.
+          $this->view->field[$field_id]->options['exclude'] = FALSE;
+          // Render the row.
+          $attributes[$hid] = trim($this->row_plugin->render($record));
+        }
+        // Restore the state of the exclude options in the fields.
+        foreach ($this->view->field as $fid => $field) {
+          $this->view->field[$fid]->options['exclude'] = $field_exclude[$fid];
+        }
+
+        // Add the 'name' attribute.
+        if (isset($this->options['data_source']['name_field'])) {
+          if (isset($attributes[$this->options['data_source']['name_field']])) {
+            $attributes['name'] = $attributes[$this->options['data_source']['name_field']];
           }
         }
-        $features = $this->reduce_features(
-          $this->options['grouping'],
-          $features,
-          $this->coalesce_wkt($feature,
-            $handlers,
-            $this->options['data_source']),
-          $title);
+
+        // Add the 'description' attribute.
+        if (isset($this->options['data_source']['description_field'])) {
+          // Handle rendering the whole record.
+          if ($this->options['data_source']['description_field'] === '#row') {
+            $attributes['description'] = trim($this->row_plugin->render($record));
+          } else {
+            if (isset($attributes[$this->options['data_source']['description_field']])) {
+              $attributes['description'] = $attributes[$this->options['data_source']['description_field']];
+            }
+          }
+        }
+
+        // We do not need the rendered value for these fields,
+        // just the raw value.
+        // This is why we use $this->rendered_fields.
+        if (isset($this->options['data_source']['value'])) {
+          switch ($this->options['data_source']['value']) {
+            case 'wkt':
+              $handler = $handlers[$this->options['data_source']['wkt']];
+              $wkt = $handler->allow_advanced_render() ? $handler->advanced_render($record) : $handler->render($record);
+              break;
+            case 'other_latlon':
+              $handler = $handlers[$this->options['data_source']['other_lon']];
+              $other_lon = $handler->allow_advanced_render() ? $handler->advanced_render($record) : $handler->render($record);
+              $handler = $handlers[$this->options['data_source']['other_lat']];
+              $other_lat = $handler->allow_advanced_render() ? $handler->advanced_render($record) : $handler->render($record);
+              $wkt = 'POINT(' . $other_lon . ' ' . $other_lat . ')';
+              break;
+          }
+        }
+
+        // Only render features that has been enabled in the configuration
+        // of the display.
+        if (isset($this->options['attributes']['display'])) {
+          foreach($this->options['attributes']['display'] as $fid => $value) {
+            if ($this->options['attributes']['display'][$fid] === 0) {
+              unset($attributes[$fid]);
+            }
+          }
+        }
+
+        // Create features array.
+        $feature = array(
+          'projection' => 'EPSG:4326',
+          'attributes' => $attributes,
+          'wkt' => $wkt,
+        );
+
+        $features = $this->reduce_features($this->options['grouping'], $features, $feature, $title);
       }
     }
+
+    // For grouping, handle a bit differently.
     if ($this->options['grouping']) {
-      return $this->coalesce_groups($features,
-        $handlers,
-        $this->options['data_source']);
+      $features = $this->coalesce_groups($features, $handlers, $this->options['data_source']);
     }
-    else {
-      return $this->coalesce_features($features,
-        $handlers,
-        $this->options['data_source']);
-    }
+
+    return $features;
   }
 
   /**
-   * Render the map features.
+   * Basically a macro because
+   * #state is rather verbose
+   *
+   * openlayers_views_style_data specific
    */
-  function render($result) {
-    return empty($this->view->live_preview) ?
-      $this->map_features(
-        $this->render_grouping($result, $this->options['grouping'])
-      ) :
-      t('OpenLayers views are not compatible with live preview.');
+  function datasource_dependent($type) {
+    return array('visible' => array('#edit-style-options-data-source-value' => array('value' => $type)));
   }
+
+  /**
+   * Coalesce features into single grouped feature when grouping is enabled.
+   *
+   * openlayers_views_style_data specific
+   */
+  function coalesce_groups($features, $handlers, $ds) {
+
+    // Combine wkt into geometry collections if they are an array
+    foreach ($features as &$feature) {
+      if (is_array($feature['wkt'])) {
+        if (count($feature['wkt']) > 1) {
+          $feature['wkt'] = $this->get_group_wkt($feature['wkt']);
+        }
+        else {
+          $feature['wkt'] = $feature['wkt'][0];
+        }
+      }
+    }
+
+    // Process title and description for groups
+    foreach ($features as $k => &$feature) {
+      $feature['attributes']['name'] = $k;
+      $feature['attributes'] = array_merge($feature['attributes'], $feature['features'][0]['attributes']);
+
+      $formatted_features = array();
+      foreach ($feature['features'] as $subfeature) {
+
+        // Create name and description attributes.  Note that there are a
+        // couple exceptions to using fields.
+        $exceptions = array('#row');
+
+        // Run the output through a theme.
+        $formatted_features[] = theme('openlayers_views_group_display_item',
+          array(
+            'name' => isset($handlers[$ds['name_field']]) ?
+              $subfeature['attributes'][$ds['name_field']] : FALSE,
+            'description' => (in_array($ds['description_field'], $exceptions) ||
+              isset($handlers[$ds['description_field']])) ?
+              $subfeature['attributes'][$ds['description_field']] : FALSE
+          )
+        );
+
+        // Remove rendered rows to keep data size down for JS.
+        if (in_array($ds['description_field'], $exceptions)) {
+          unset($subfeature['attributes'][$ds['description_field']]);
+        }
+      }
+
+      // Then run all gathered features through item_ist theme.
+      $feature['attributes']['description'] = theme('item_list',
+        array('items' => $formatted_features)
+      );
+    }
+    return $features;
+  }
+
+  /**
+   * Combine all group wkt into a single geometry collection
+   *
+   * openlayers_views_style_data specific
+   */
+  function get_group_wkt($wkt_array) {
+    geophp_load();
+    $geophp = geoPHP::load($wkt_array, 'wkt');
+    return $geophp->out('wkt');
+  }
+
+  /**
+   * Split string according to first match of passed regEx index of $regExes
+   */
+  function preg_explode($regEx, $str) {
+    $matches = array();
+    preg_match($this->regExes[$regEx], $str, $matches);
+    return empty($matches)?array(trim($str)):explode($matches[0], trim($str));
+  }
+
+  /**
+   * Basically an algebraic reduction; given whether to group,
+   * a feature, a list of features, etc., return a full $features
+   * array with the element added, either straight non-grouped,
+   * or within a new or existing group
+   *
+   * openlayers_views_style_data specific
+   */
+  function reduce_features($is_grouped, $features, $feature, $group) {
+    if ($is_grouped) {
+      if (isset($features[$group])) {
+        $features[$group]['attributes']['count']++;
+        $features[$group]['wkt'][] = $feature['wkt'];
+        $features[$group]['features'][] = $feature;
+        return $features;
+      }
+      else {
+        $features[$group] = array(
+          'attributes' => array('count' => 1),
+          'wkt' => array($feature['wkt']),
+          'projection' => $feature['projection'],
+          'features' => array($feature)
+        );
+        return $features;
+      }
+    }
+    else {
+      array_push($features, $feature);
+      return $features;
+    }
+  }
+
 }

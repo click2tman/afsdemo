@@ -1,4 +1,3 @@
-$Id: README.txt,v 1.35.2.2 2010/10/28 20:45:44 alexb Exp $
 
 
 "It feeds"
@@ -50,9 +49,20 @@ Installation
   Feeds News, Feeds Import, Feeds Fast News (more info below).
 - Make sure cron is correctly configured http://drupal.org/cron
 - Go to import/ to import data.
-- To use SimplePie parser, download SimplePie and place simplepie.inc into
-  feeds/libraries. Recommended version: 1.2.
-  http://simplepie.org/
+
+SimplePie Installation
+======================
+
+- To install the SimplePie parser plugin, complete the following steps:
+  1. Download SimplePie from http://simplepie.org/downloads. The recommended
+     version is: 1.3.
+  2. Decompress the downloaded zip file.
+  3. Rename the uncompressed folder to 'simplepie'.
+     For example rename 'simplepie-simplepie-e9472a1' to 'simplepie'.
+  4. Move the folder to sites/all/libraries. The final directory structure
+     should be sites/all/libraries/simplepie.
+  5. Flush the Drupal cache.
+  6. The SimplePie parser should be available now in the list of parsers.
 
 Feature modules
 ===============
@@ -191,11 +201,19 @@ Default:     50
 Name:        http_request_timeout
 Default:     15
 Description: Timeout in seconds to wait for an HTTP get request to finish.
+Note:        This setting could be overridden per importer in admin UI :
+             admin/structure/feeds/<your_importer>/settings/<your_fetcher> page.
 
 Name:        feeds_never_use_curl
 Default:     FALSE
 Description: Flag to stop feeds from using its cURL for http requests. See
              http_request_use_curl().
+
+Name:        feeds_use_mbstring
+Default:     TRUE
+Description: The extension mbstring is used to convert encodings during parsing.
+             The reason that this can be turned off is to be able to test Feeds
+             behavior when the extension is not available.
 
 Glossary
 ========

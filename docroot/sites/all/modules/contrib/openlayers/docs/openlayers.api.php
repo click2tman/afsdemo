@@ -1,5 +1,4 @@
 <?php
-// $Id: openlayers.api.php,v 1.2.2.5 2010/06/02 23:13:40 zzolo Exp $
 
 /**
  * @file
@@ -52,8 +51,8 @@ function hook_openlayers_map_alter(&$map = array()) {
  *   being a unique string identifier key which corresponds to the
  *   layers' types.  The next level being an array of key/value
  *   pairs:
- *   - "description": 
- *   - "layer_type": 
+ *   - "description":
+ *   - "layer_type":
  */
 function hook_openlayers_layer_types() {
   // Take from openlayers.layer_types.inc
@@ -77,11 +76,11 @@ function hook_openlayers_layer_types() {
  *
  * IMPORTANT:
  *
- * In order to support styles, presets, and layers in an external module,
- * one must notify the CTools module that that module provides implementations 
- * of the hooks for styles, presets, and/or layers.
+ * In order to support styles, maps, and layers in an external module,
+ * one must notify the CTools module that that module provides implementations
+ * of the hooks for styles, maps, and/or layers.
  *
- * This function is just an example implementation of 
+ * This function is just an example implementation of
  * hook_ctools_plugin_api() and should be alter according to
  * your module's name.
  *
@@ -98,7 +97,7 @@ function hook_openlayers_layer_types() {
 function openlayers_example_ctools_plugin_api($module, $api) {
   if ($module == "openlayers") {
     switch ($api) {
-      case 'openlayers_presets':
+      case 'openlayers_maps':
         return array('version' => 1);
 
       case 'openlayers_layers':
@@ -125,12 +124,12 @@ function openlayers_example_ctools_plugin_api($module, $api) {
  * of translatable string.
  *
  * @return
- *   Return an associative array with index being a unique string 
+ *   Return an associative array with index being a unique string
  *   identifier, and simple objects with the following properties:
- *   - "api_version": 
- *   - "name": 
- *   - "title": 
- *   - "data": 
+ *   - "api_version":
+ *   - "name":
+ *   - "title":
+ *   - "data":
  */
 function hook_openlayers_layers() {
   // Taken from openlayers.layers.inc
@@ -142,14 +141,14 @@ function hook_openlayers_layers() {
   $layer->title = 'Google Maps Satellite';
   $layer->description = 'Google Maps Satellite Imagery.';
   $layer->data = array(
-    'baselayer' => TRUE,
+    'isBaseLayer' => TRUE,
     'type' => 'satellite',
-    'projection' => array('900913'),
+    'projection' => array('EPSG:900913'),
     'layer_type' => 'openlayers_layer_type_google',
   );
   $layers[$layer->name] = $layer;
   return $layers;
-  
+
   // Extra code to support potx extractors
   $potx = array(
     t('Google Maps Satellite'),
@@ -170,11 +169,11 @@ function hook_openlayers_layers() {
  *   Return a nested associative array with the top level
  *   being a unique string identifier, and the nested array
  *   containing the following key/pairs:
- *   - "title": 
- *   - "description": 
- *   - "file": 
- *   - "type": 
- *   - "behavior": 
+ *   - "title":
+ *   - "description":
+ *   - "file":
+ *   - "type":
+ *   - "behavior":
  */
 function hook_openlayers_behaviors() {
   // Taken from openlayers.behaviors.inc
@@ -204,11 +203,11 @@ function hook_openlayers_behaviors() {
  * @see openlayers_example_ctools_plugin_api().
  *
  * @return
- *   Return an associative array with index being a unique string 
+ *   Return an associative array with index being a unique string
  *   identifier, and simple objects with the following properties:
- *   - "api_version": 
- *   - "name": 
- *   - "title": 
+ *   - "api_version":
+ *   - "name":
+ *   - "title":
  *   - "data":
  */
 function hook_openlayers_styles() {
@@ -234,28 +233,29 @@ function hook_openlayers_styles() {
 }
 
 /**
- * OpenLayers Presets
+ * OpenLayers maps
  *
- * Define map presets.
+ * Define map objects.
  *
  * @return
- *   Return an associative array with index being a unique string 
+ *   Return an associative array with index being a unique string
  *   identifier, and simple objects with the following properties:
- *   - "api_version": 
- *   - "name": 
- *   - "title": 
+ *   - "api_version":
+ *   - "name":
+ *   - "title":
  *   - "data":
  */
-function hook_openlayers_presets() {
-  // Taken from openlayers.presets.inc
+function hook_openlayers_maps() {
+  // Taken from openlayers.maps.inc
 
   $default = new stdClass();
   $default->api_version = 1;
   $default->name = 'default';
   $default->title = t('Default Map');
-  $default->description = t('This is the default map preset that comes with the OpenLayers module.');
+  $default->description = t('This is the default map that comes with the OpenLayers module.');
   $default->data = array(
-    'projection' => '900913',
+    'projection' => 'EPSG:900913',
+    'displayProjection' => 'EPSG:4326',
     'width' => 'auto',
     'default_layer' => 'osm_mapnik',
     'height' => '400px',
@@ -264,10 +264,6 @@ function hook_openlayers_presets() {
         'centerpoint' => '0,0',
         'zoom' => '2'
       )
-    ),
-    'options' => array(
-      'displayProjection' => '4326',
-      'maxExtent' => openlayers_get_extent('4326'),
     ),
     'behaviors' => array(
       'openlayers_behavior_panzoombar' => array(),

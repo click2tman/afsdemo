@@ -4,9 +4,9 @@ package = Testing
 core = 7.x
 hidden = TRUE
 
-; Information added by drupal.org packaging script on 2012-12-15
-version = "7.x-1.0-beta3"
+; Information added by Drupal.org packaging script on 2015-10-28
+version = "7.x-1.0-beta4"
 core = "7.x"
 project = "entity_autocomplete"
-datestamp = "1355614650"
+datestamp = "1446025742"
 
