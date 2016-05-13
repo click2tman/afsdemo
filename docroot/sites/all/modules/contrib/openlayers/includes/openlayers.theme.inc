@@ -1,45 +1,36 @@
 <?php
+// $Id: openlayers.theme.inc,v 1.6.2.6.2.3 2010/12/06 18:39:30 tmcw Exp $
 
 /**
  * @file
- * This file holds the theme and preprocess functions for openlayers module
+ * This file holds the theme functions for openlayers module
  *
  * @ingroup openlayers
  */
 
 /**
- * Preprocess function for openlayers_map
+ * Theme function for openlayers_map
  */
-function openlayers_preprocess_openlayers_map(&$variables, $hook) {
-  $map = $variables['map'];
+function theme_openlayers_map($args) {
+  $map = $args['map'];
+  $preset_name = $args['preset_name'];
+  // To ensure that any controls are on the map correctly, we need to
+  // wrap the map in a container, and take into account percentage dimensions
+  $container_width = $map['width'];
+  $container_height = $map['height'];
+  $map['width'] = (strpos($map['width'], '%') > 0) ? '100%' : $map['width'];
+  $map['height'] = (strpos($map['height'], '%') > 0) ? '100%' : $map['height'];
 
-  $map['map_name'] = isset($map['map_name']) ? $map['map_name'] : '';
-  $css_map_name = drupal_clean_css_identifier($map['map_name']);
-
-  $links = array();
-  if (!empty($map['map_name'])) {
-    $links = array(
-      '#type' => 'contextual_links',
-      '#contextual_links' => array(
-        'openlayers' => array(
-          'admin/structure/openlayers/maps/list', array($map['map_name']),
-        ),
-      )
-    );
-  }
-
-  $variables['links'] = render($links);
-  $variables['container']['classes'] = implode(" ", array(
-    'contextual-links-region',
-    'openlayers-container',
-    'openlayers-container-map-' . $css_map_name
-  ));
-  $variables['container']['width'] = $map['width'];
-  $variables['container']['height'] = $map['height'];
-  $variables['container']['id'] = 'openlayers-container-' . $map['id'];
-  $variables['classes_array'][] = 'openlayers-map-' . $css_map_name;
+  // Create output
+  $output = '
+    <div style="width: ' . $container_width . '; height: ' . $container_height .
+      ';" id="openlayers-container-'. $map['id'] .
+      '" class="openlayers-container openlayers-container-preset-' . $preset_name .'">
+      <div style="width: ' . $map['width'] . '; height: ' . $map['height'] . ';" id="'.
+      $map['id'] .'" class="openlayers-map openlayers-preset-' . $preset_name .'"></div>
+    </div>';
+  return $output;
 }
-
 
 /**
  * Theme function to be able to override styles

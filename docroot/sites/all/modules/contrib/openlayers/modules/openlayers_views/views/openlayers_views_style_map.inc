@@ -1,4 +1,5 @@
 <?php
+// $Id: openlayers_views_style_map.inc,v 1.20.2.9.2.3 2010/12/07 22:03:28 tmcw Exp $
 
 /**
  * @file
@@ -20,8 +21,8 @@ class openlayers_views_style_map extends views_plugin_style {
    */
   function option_definition() {
     $options = parent::option_definition();
-    $options['map'] = array(
-        'default' => variable_get('openlayers_default_map', 'default'));
+    $options['preset'] = array(
+        'default' => variable_get('openlayers_default_preset', 'default'));
     return $options;
   }
 
@@ -31,43 +32,37 @@ class openlayers_views_style_map extends views_plugin_style {
   function options_form(&$form, &$form_state) {
     parent::options_form($form, $form_state);
 
-    // Map
-    $form['map'] = array(
+    // Map Preset
+    $form['preset'] = array(
       '#type' => 'select',
-      '#title' => t('Map'),
+      '#title' => t('Map preset'),
       '#description' => t('This is map that will be used to render the view.'),
-      '#options' => openlayers_map_options(),
-      '#default_value' => $this->options['map'] ?
-        $this->options['map'] :
-        variable_get('openlayers_default_map', 'default'),
+      '#options' => openlayers_preset_options(),
+      '#default_value' => $this->options['preset'] ?
+        $this->options['preset'] :
+        variable_get('openlayers_default_preset', 'default'),
     );
   }
-
+  
   /**
    * Query - override to make sure this doesn't get run
    */
   function query() {
-    if (isset($this->view->query->fields)) {
-      $this->view->query->fields = array();
-    }
+    $this->view->query->fields = array();
     $this->view->executed = TRUE;
-    $this->view->result = TRUE;
-    $map = openlayers_map_load($this->options['map']);
-    $render = openlayers_render_map($map);
-    $this->view->result = $render || !$map->data['hide_empty_map'] ? TRUE : FALSE;
-    if ($this->view->result) {
-      $this->render = $render;
-    }
   }
 
   /**
    * Renders views (map)
    */
   function render() {
+    // Get selected preset
+    $preset = openlayers_preset_load($this->options['preset']);
+
     return theme($this->theme_functions(), array(
-      'view' => $this->view,
-      'options' => $this->options,
-      'map' => $this->render
+      'view' => $this->view, 
+      'options' => $this->options, 
+      'map' => openlayers_render_map($preset->data, $preset->name)
     ));
   }
 }

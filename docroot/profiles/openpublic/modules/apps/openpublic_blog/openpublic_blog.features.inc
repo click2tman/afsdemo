@@ -29,11 +29,11 @@ function openpublic_blog_views_api($module = NULL, $api = NULL) {
 function openpublic_blog_node_info() {
   $items = array(
     'blog_entry' => array(
-      'name' => t('Blog entry ivy'),
+      'name' => t('Blog entry'),
       'base' => 'node_content',
       'description' => t('A blog entry is a single post to an online journal, or blog.'),
       'has_title' => '1',
-      'title_label' => t('ivy'),
+      'title_label' => t('Title'),
       'help' => '',
     ),
   );

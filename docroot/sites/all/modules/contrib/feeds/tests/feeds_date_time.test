@@ -1,4 +1,5 @@
 <?php
+// $Id: feeds_date_time.test,v 1.1.4.2 2010/09/29 23:56:10 alexb Exp $
 
 /**
  * @file
@@ -12,20 +13,25 @@
  * Not inheriting from Feeds base class as ParserCSV should be moved out of
  * Feeds at some time.
  */
-class FeedsDateTimeTest extends FeedsWebTestCase {
+class FeedsDateTimeTest extends DrupalWebTestCase  {
   protected $profile = 'testing';
 
-  public static function getInfo() {
+  /**
+   * Describe this test.
+   */
+  public function getInfo() {
     return array(
-      'name' => 'FeedsDateTime unit tests',
-      'description' => 'Unit tests for Feeds date handling.',
-      'group' => 'Feeds',
+      'name' => t('FeedsDateTime unit tests'),
+      'description' => t('Unit tests for Feeds date handling.'),
+      'group' => t('Feeds'),
     );
   }
 
+  /**
+   * Set up.
+   */
   public function setUp() {
-    parent::setUp();
-    module_load_include('inc', 'feeds' , 'plugins/FeedsParser');
+    parent::setUp('feeds', 'feeds_ui', 'ctools', 'job_scheduler');
   }
 
   /**
@@ -38,16 +44,5 @@ class FeedsDateTimeTest extends FeedsWebTestCase {
     $this->assertTrue(is_numeric($date->format('U')));
     $date = new FeedsDateTime('12/3/2009 20:00:10');
     $this->assertTrue(is_numeric($date->format('U')));
-
-    // Check that years above 2000 work correctly.
-    $date1 = new FeedsDateTime(2012);
-    $date2 = new FeedsDateTime('January 2012');
-    $this->assertEqual($date1->format('U'), $date2->format('U'));
-
-    // Check that years before 1902 work correctly.
-    $early_date_string = '01/02/1901';
-    $date = new FeedsDateTime($early_date_string);
-    $this->assertEqual($date->format('m/d/Y'), $early_date_string);
   }
-
 }

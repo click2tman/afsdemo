@@ -1,4 +1,5 @@
 <?php
+// $Id: openlayers_views.theme.inc,v 1.3.2.3.2.2 2010/12/06 19:42:04 tmcw Exp $
 
 /**
  * @file
@@ -16,9 +17,9 @@ function theme_openlayers_views_group_display_item($args) {
   // Build output
   return ((!empty($args['name'])) ?
     '<h2 class="point-title openlayers-views-group-feature-name">'
-    . $args['name']
+    . $args['name'] 
     . '</h2>' : '') .
-    (!empty($args['description']) ?
+    (!empty($args['description']) ? 
     '<div class="point-content openlayers-views-group-feature-description">'
     . $args['description']
     . '</div>' : '');

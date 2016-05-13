@@ -1,4 +1,5 @@
 <?php
+// $Id: feeds.plugins.inc,v 1.7.2.1 2010/10/04 20:49:28 alexb Exp $
 
 /**
  * @file
@@ -9,7 +10,7 @@
  * Break out for feeds_feed_plugins().
  */
 function _feeds_feeds_plugins() {
-  $path = drupal_get_path('module', 'feeds') . '/plugins';
+  $path = drupal_get_path('module', 'feeds') .'/plugins';
 
   $info = array();
   $info['FeedsPlugin'] = array(
@@ -21,8 +22,7 @@ function _feeds_feeds_plugins() {
     ),
   );
   $info['FeedsMissingPlugin'] = array(
-    'name' => 'Missing plugin',
-    'description' => 'There is a problem with your configuration.',
+    'hidden' => TRUE,
     'handler' => array(
       'class' => 'FeedsMissingPlugin',
       'file' => 'FeedsPlugin.inc',
@@ -86,19 +86,17 @@ function _feeds_feeds_plugins() {
       'path' => $path,
     ),
   );
-  if (extension_loaded('SimpleXML')) {
-    $info['FeedsSyndicationParser'] = array(
-      'name' => 'Common syndication parser',
-      'description' => 'Parse RSS and Atom feeds.',
-      'help' => 'Parse XML feeds in RSS 1, RSS 2 and Atom format.',
-      'handler' => array(
-        'parent' => 'FeedsParser',
-        'class' => 'FeedsSyndicationParser',
-        'file' => 'FeedsSyndicationParser.inc',
-        'path' => $path,
-      ),
-    );
-  }
+  $info['FeedsSyndicationParser'] = array(
+    'name' => 'Common syndication parser',
+    'description' => 'Parse RSS and Atom feeds.',
+    'help' => 'Parse XML feeds in RSS 1, RSS 2 and Atom format.',
+    'handler' => array(
+      'parent' => 'FeedsParser',
+      'class' => 'FeedsSyndicationParser',
+      'file' => 'FeedsSyndicationParser.inc',
+      'path' => $path,
+    ),
+  );
   $info['FeedsOPMLParser'] = array(
     'name' => 'OPML parser',
     'description' => 'Parse OPML files.',
@@ -109,7 +107,7 @@ function _feeds_feeds_plugins() {
       'path' => $path,
     ),
   );
-  if (feeds_simplepie_exists()) {
+  if (feeds_library_exists('simplepie.inc', 'simplepie')) {
     $info['FeedsSimplePieParser'] = array(
       'name' => 'SimplePie parser',
       'description' => 'Parse RSS and Atom feeds.',
@@ -167,6 +165,5 @@ function _feeds_feeds_plugins() {
       ),
     );
   }
-
   return $info;
 }

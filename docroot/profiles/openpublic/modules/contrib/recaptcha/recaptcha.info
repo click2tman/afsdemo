@@ -1,16 +1,17 @@
 name = reCAPTCHA
-description = Uses the reCAPTCHA web service to improve the CAPTCHA system.
-core = 7.x
-package = Spam control
+description = "Uses the reCAPTCHA web service to improve the CAPTCHA system."
 dependencies[] = captcha
-files[] = tests/recaptcha_base.test
-files[] = tests/recaptcha_ui.test
-files[] = tests/recaptcha_server_status.test
+package = "Spam control"
+core = 7.x
 configure = admin/config/people/captcha/recaptcha
 
-; Information added by Drupal.org packaging script on 2016-02-17
-version = "7.x-1.13"
+files[] = recaptcha.admin.inc
+files[] = recaptcha.module
+files[] = recaptcha.install
+
+; Information added by Drupal.org packaging script on 2014-02-06
+version = "7.x-1.11"
 core = "7.x"
 project = "recaptcha"
-datestamp = "1455735240"
+datestamp = "1391701492"
 

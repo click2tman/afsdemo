@@ -1,4 +1,5 @@
 <?php
+// $Id: common_syndication_parser.inc,v 1.15 2010/09/07 22:26:02 alexb Exp $
 
 /**
  * @file
@@ -19,7 +20,12 @@
  *  stdClass The structured datas extracted from the feed.
  */
 function common_syndication_parser_parse($string) {
-  @ $xml = simplexml_load_string($string, NULL, LIBXML_NOERROR | LIBXML_NOWARNING | LIBXML_NOCDATA);
+  if (!defined('LIBXML_VERSION') || (version_compare(phpversion(), '5.1.0', '<'))) {
+    @ $xml = simplexml_load_string($string, NULL);
+  }
+  else {
+    @ $xml = simplexml_load_string($string, NULL, LIBXML_NOERROR | LIBXML_NOWARNING | LIBXML_NOCDATA);
+  }
 
   // Got a malformed XML.
   if ($xml === FALSE || is_null($xml)) {
@@ -34,6 +40,18 @@ function common_syndication_parser_parse($string) {
   }
   if ($feed_type == "RDF") {
     return _parser_common_syndication_RDF10_parse($xml);
+  }
+  return FALSE;
+}
+
+/**
+ * Get the cached version of the <var>$url</var>
+ */
+function _parser_common_syndication_cache_get($url) {
+  $cache_file = _parser_common_syndication_sanitize_cache() .'/'. md5($url);
+  if (file_exists($cache_file)) {
+    $file_content = file_get_contents($cache_file);
+    return unserialize($file_content);
   }
   return FALSE;
 }
@@ -80,8 +98,7 @@ function _parser_common_syndication_atom10_parse($feed_XML) {
     "georss" => "http://www.georss.org/georss",
   );
 
-  $base = $feed_XML->xpath("@base");
-  $base = (string) array_shift($base);
+  $base = (string) array_shift($feed_XML->xpath("@base"));
   if (!valid_url($base, TRUE)) {
     $base = FALSE;
   }
@@ -151,7 +168,7 @@ function _parser_common_syndication_atom10_parse($feed_XML) {
       }
       $body .= "{$news->content}";
     }
-    elseif (!empty($news->summary)) {
+    else if (!empty($news->summary)) {
       foreach ($news->summary->children() as $child)  {
         $body .= $child->asXML();
       }
@@ -165,14 +182,16 @@ function _parser_common_syndication_atom10_parse($feed_XML) {
       }
     }
 
-    $original_author = '';
+    $author_found = FALSE;
     if (!empty($news->source->author->name)) {
       $original_author = "{$news->source->author->name}";
+      $author_found = TRUE;
     }
-    elseif (!empty($news->author->name)) {
+    else if (!empty($news->author->name)) {
       $original_author = "{$news->author->name}";
+      $author_found = TRUE;
     }
-    elseif (!empty($feed_XML->author->name)) {
+    if (!empty($feed_XML->author->name) && !$author_found) {
       $original_author = "{$feed_XML->author->name}";
     }
 
@@ -182,19 +201,7 @@ function _parser_common_syndication_atom10_parse($feed_XML) {
     $item['title'] = _parser_common_syndication_title($title, $body);
     $item['description'] = $body;
     $item['author_name'] = $original_author;
-
-    // Fall back to updated for timestamp if both published and issued are
-    // empty.
-    if (isset($news->published)) {
-      $item['timestamp'] = _parser_common_syndication_parse_date("{$news->published}");
-    }
-    elseif (isset($news->issued)) {
-       $item['timestamp'] = _parser_common_syndication_parse_date("{$news->issued}");
-    }
-    elseif (isset($news->updated)) {
-      $item['timestamp'] = _parser_common_syndication_parse_date("{$news->updated}");
-    }
-
+    $item['timestamp'] = _parser_common_syndication_parse_date(isset($news->published) ? "{$news->published}" : "{$news->issued}");
     $item['url'] = trim($original_url);
     if (valid_url($item['url']) && !valid_url($item['url'], TRUE) && !empty($base)) {
       $item['url'] = $base . $item['url'];
@@ -243,15 +250,16 @@ function _parser_common_syndication_RDF10_parse($feed_XML) {
     'rss'      => 'http://purl.org/rss/1.0/',
   );
 
-  // Get all namespaces declared in the feed element.
-  $namespaces = $feed_XML->getNamespaces(TRUE);
+  // Get all namespaces declared in the feed element, with special handling
+  // for PHP versions prior to 5.1.2 as they don't handle namespaces.
+  $namespaces = version_compare(phpversion(), '5.1.2', '<') ? array() : $feed_XML->getNamespaces(TRUE);
 
   // Process the <rss:channel> resource containing feed metadata:
   foreach ($feed_XML->children($canonical_namespaces['rss'])->channel as $rss_channel) {
     $parsed_source = array(
-      'title'       => _parser_common_syndication_title((string) $rss_channel->title),
-      'description' => (string) $rss_channel->description,
-      'link'        => (string) $rss_channel->link,
+      'title'       => _parser_common_syndication_title((string)$rss_channel->title),
+      'description' => (string)$rss_channel->description,
+      'link'        => (string)$rss_channel->link,
       'items'       => array(),
     );
     break;
@@ -271,11 +279,11 @@ function _parser_common_syndication_RDF10_parse($feed_XML) {
       // still be able to correctly handle it.
       foreach ($rss_item->attributes($ns_uri) as $attr_name => $attr_value) {
         $ns_prefix = ($ns_prefix = array_search($ns_uri, $canonical_namespaces)) ? $ns_prefix : $ns;
-        $rdf_data[$ns_prefix . ':' . $attr_name][] = (string) $attr_value;
+        $rdf_data[$ns_prefix .':'. $attr_name][] = (string)$attr_value;
       }
       foreach ($rss_item->children($ns_uri) as $rss_property) {
         $ns_prefix = ($ns_prefix = array_search($ns_uri, $canonical_namespaces)) ? $ns_prefix : $ns;
-        $rdf_data[$ns_prefix . ':' . $rss_property->getName()][] = (string) $rss_property;
+        $rdf_data[$ns_prefix .':'. $rss_property->getName()][] = (string)$rss_property;
       }
     }
 
@@ -284,7 +292,7 @@ function _parser_common_syndication_RDF10_parse($feed_XML) {
       'title'       => array('rss:title', 'dc:title'),
       'description' => array('rss:description', 'dc:description', 'content:encoded'),
       'url'         => array('rss:link', 'rdf:about'),
-      'author_name' => array('dc:creator', 'dc:publisher'),
+      'author_name'      => array('dc:creator', 'dc:publisher'),
       'guid'        => 'rdf:about',
       'timestamp'   => 'dc:date',
       'tags'        => 'dc:subject'
@@ -339,7 +347,7 @@ function _parser_common_syndication_RDF10_item($rdf_data, $mappings) {
  */
 function _parser_common_syndication_RSS20_parse($feed_XML) {
 
-  $ns = array(
+  $ns = array (
     "content" => "http://purl.org/rss/1.0/modules/content/",
      "dc" => "http://purl.org/dc/elements/1.1/",
      "georss" => "http://www.georss.org/georss",
@@ -359,9 +367,11 @@ function _parser_common_syndication_RSS20_parse($feed_XML) {
 
     $category = $news->xpath('category');
     // Get children for current namespace.
-    $content = (array)$news->children($ns["content"]);
-    $dc      = (array)$news->children($ns["dc"]);
-    $georss  = (array)$news->children($ns["georss"]);
+    if (version_compare(phpversion(), '5.1.2', '>')) {
+      $content = (array)$news->children($ns["content"]);
+      $dc      = (array)$news->children($ns["dc"]);
+      $georss  = (array)$news->children($ns["georss"]);
+    }
     $news = (array) $news;
     $news['category'] = $category;
 
@@ -391,7 +401,7 @@ function _parser_common_syndication_RSS20_parse($feed_XML) {
     if (!empty($news['author'])) {
       $original_author = "{$news['author']}";
     }
-    elseif (!empty($dc["creator"])) {
+    elseif (isset($dc["creator"])) {
       $original_author = (string)$dc["creator"];
     }
 
@@ -400,11 +410,11 @@ function _parser_common_syndication_RSS20_parse($feed_XML) {
       $guid = $original_url;
     }
 
-    if (!empty($news['guid'])) {
+    if (isset($news['guid'])) {
       $guid = "{$news['guid']}";
     }
 
-    if (!empty($georss['featureName'])) {
+    if (isset($georss['featureName'])) {
       $geoname = "{$georss['featureName']}";
     }
 
@@ -412,7 +422,7 @@ function _parser_common_syndication_RSS20_parse($feed_XML) {
     $lon =
     $latlon =
     $geoname = NULL;
-    if (!empty($georss['point'])) {
+    if (isset($georss['point'])) {
       $latlon = explode(' ', $georss['point']);
       $lat = "{$latlon[0]}";
       $lon = "{$latlon[1]}";
@@ -443,11 +453,8 @@ function _parser_common_syndication_RSS20_parse($feed_XML) {
     $item['title'] = _parser_common_syndication_title($title, $body);
     $item['description'] = $body;
     $item['author_name'] = $original_author;
-    if (!empty($news['pubDate'])) {
+    if (isset($news['pubDate'])) {
       $item['timestamp'] = _parser_common_syndication_parse_date($news['pubDate']);
-    }
-    elseif (!empty($dc['date'])) {
-      $item['timestamp'] = _parser_common_syndication_parse_date($dc['date']);
     }
     else {
       $item['timestamp'] = time();
@@ -483,25 +490,12 @@ function _parser_common_syndication_RSS20_parse($feed_XML) {
  */
 function _parser_common_syndication_parse_date($date_str) {
   // PHP < 5.3 doesn't like the GMT- notation for parsing timezones.
-  $date_str = str_replace('GMT-', '-', $date_str);
-  $date_str = str_replace('GMT+', '+', $date_str);
+  $date_str = str_replace("GMT-", "-", $date_str);
+  $date_str = str_replace("GMT+", "+", $date_str);
   $parsed_date = strtotime($date_str);
-
   if ($parsed_date === FALSE || $parsed_date == -1) {
     $parsed_date = _parser_common_syndication_parse_w3cdtf($date_str);
   }
-
-  if (($parsed_date === FALSE || $parsed_date == -1)) {
-    // PHP does not support the UT timezone. Fake it. The system that generated
-    // this, Google Groups, probably meant UTC.
-    $date_str = strtolower(trim($date_str));
-    $last_three = substr($date_str, strlen($date_str) - 3, 3);
-
-    if ($last_three == ' ut') {
-      $parsed_date = strtotime($date_str . 'c');
-    }
-  }
-
   return $parsed_date === FALSE ? time() : $parsed_date;
 }
 
@@ -574,8 +568,8 @@ function _parser_common_syndication_link($links) {
 function _parser_common_syndication_title($title, $body = FALSE) {
   if (empty($title) && !empty($body)) {
     // Explode to words and use the first 3 words.
-    $words = preg_split('/[\s,]+/', strip_tags($body));
-    $title = implode(' ', array_slice($words, 0, 3));
+    $words = preg_split("/[\s,]+/", strip_tags($body));
+    $title = $words[0] .' '. $words[1] .' '. $words[2];
   }
   return $title;
 }

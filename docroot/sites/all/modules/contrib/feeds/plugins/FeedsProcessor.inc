@@ -1,21 +1,11 @@
 <?php
+// $Id: FeedsProcessor.inc,v 1.20.2.11 2010/12/22 01:46:46 alexb Exp $
 
-/**
- * @file
- * Contains FeedsProcessor and related classes.
- */
-
-// Insert mode for new items.
-define('FEEDS_SKIP_NEW', 0);
-define('FEEDS_INSERT_NEW', 1);
 
 // Update mode for existing items.
 define('FEEDS_SKIP_EXISTING', 0);
 define('FEEDS_REPLACE_EXISTING', 1);
 define('FEEDS_UPDATE_EXISTING', 2);
-// Options for handling content in Drupal but not in source data.
-define('FEEDS_SKIP_NON_EXISTENT', 'skip');
-define('FEEDS_DELETE_NON_EXISTENT', 'delete');
 
 // Default limit for creating items on a page load, not respected by all
 // processors.
@@ -27,22 +17,9 @@ define('FEEDS_PROCESS_LIMIT', 50);
 class FeedsValidationException extends Exception {}
 
 /**
- * Thrown if a an access check fails.
- */
-class FeedsAccessException extends Exception {}
-
-/**
  * Abstract class, defines interface for processors.
  */
 abstract class FeedsProcessor extends FeedsPlugin {
-
-  /**
-   * Implements FeedsPlugin::pluginType().
-   */
-  public function pluginType() {
-    return 'processor';
-  }
-
   /**
    * @defgroup entity_api_wrapper Entity API wrapper.
    */
@@ -53,55 +30,15 @@ abstract class FeedsProcessor extends FeedsPlugin {
   public abstract function entityType();
 
   /**
-   * Bundle type this processor operates on.
-   *
-   * Defaults to the entity type for entities that do not define bundles.
-   *
-   * @return string|NULL
-   *   The bundle type this processor operates on, or NULL if it is undefined.
-   */
-  public function bundle() {
-    return $this->config['bundle'];
-  }
-
-  /**
-   * Provides a list of bundle options for use in select lists.
-   *
-   * @return array
-   *   A keyed array of bundle => label.
-   */
-  public function bundleOptions() {
-    $options = array();
-    foreach (field_info_bundles($this->entityType()) as $bundle => $info) {
-      if (!empty($info['label'])) {
-        $options[$bundle] = $info['label'];
-      }
-      else {
-        $options[$bundle] = $bundle;
-      }
-    }
-    return $options;
-  }
-
-  /**
    * Create a new entity.
    *
-   * @param FeedsSource $source
+   * @param $source
    *   The feeds source that spawns this entity.
    *
-   * @return object
+   * @return
    *   A new entity object.
    */
-  protected function newEntity(FeedsSource $source) {
-    $entity = new stdClass();
-
-    $info = $this->entityInfo();
-    if (!empty($info['entity keys']['language'])) {
-      $entity->{$info['entity keys']['language']} = $this->entityLanguage();
-    }
-
-    return $entity;
-  }
+  protected abstract function newEntity(FeedsSource $source);
 
   /**
    * Load an existing entity.
@@ -113,68 +50,22 @@ abstract class FeedsProcessor extends FeedsPlugin {
    *
    * @return
    *   A new entity object.
-   *
-   * @todo We should be able to batch load these, if we found all of the
-   *   existing ids first.
    */
-  protected function entityLoad(FeedsSource $source, $entity_id) {
-    $info = $this->entityInfo();
-
-    if ($this->config['update_existing'] == FEEDS_UPDATE_EXISTING) {
-      $entities = entity_load($this->entityType(), array($entity_id));
-      $entity = reset($entities);
-    }
-    else {
-      $args = array(':entity_id' => $entity_id);
-      $table = db_escape_table($info['base table']);
-      $key = db_escape_field($info['entity keys']['id']);
-      $entity = db_query("SELECT * FROM {" . $table . "} WHERE $key = :entity_id", $args)->fetchObject();
-    }
-
-    if ($entity && !empty($info['entity keys']['language'])) {
-      $entity->{$info['entity keys']['language']} = $this->entityLanguage();
-    }
-
-    return $entity;
-  }
+  protected abstract function entityLoad(FeedsSource $source, $entity_id);
 
   /**
-   * Validates an entity.
+   * Validate an entity.
    *
    * @throws FeedsValidationException $e
-   *   Thrown if validation fails.
+   *   If validation fails.
    */
-  protected function entityValidate($entity) {
-    $info = $this->entityInfo();
-    if (empty($info['entity keys']['language'])) {
-      return;
-    }
-
-    // Ensure that a valid language is always set.
-    $key = $info['entity keys']['language'];
-    $languages = language_list('enabled');
-
-    if (empty($entity->$key) || !isset($languages[1][$entity->$key])) {
-      $entity->$key = $this->entityLanguage();
-    }
-  }
-
-  /**
-   * Access check for saving an enity.
-   *
-   * @param $entity
-   *   Entity to be saved.
-   *
-   * @throws FeedsAccessException $e
-   *   If the access check fails.
-   */
-  protected function entitySaveAccess($entity) {}
+  protected function entityValidate($entity) {}
 
   /**
    * Save an entity.
    *
    * @param $entity
-   *   Entity to be saved.
+   *   Entity to b saved.
    */
   protected abstract function entitySave($entity);
 
@@ -193,38 +84,7 @@ abstract class FeedsProcessor extends FeedsPlugin {
    * 'label plural' ... the plural label of an entity type.
    */
   protected function entityInfo() {
-    $info = entity_get_info($this->entityType());
-
-    // Entity module has defined the plural label in "plural label" instead of
-    // "label plural". So if "plural label" is defined, this will have priority
-    // over "label plural".
-    if (isset($info['plural label'])) {
-      $info['label plural'] = $info['plural label'];
-    }
-
-    return $info;
-  }
-
-  /**
-   * Returns the current language for entities.
-   *
-   * This checks if the configuration value is valid.
-   *
-   * @return string
-   *   The current language code.
-   */
-  protected function entityLanguage() {
-    if (!module_exists('locale')) {
-      // language_list() may return languages even if the locale module is
-      // disabled. See https://www.drupal.org/node/173227 why.
-      // When the locale module is disabled, there are no selectable languages
-      // in the UI, so the content should be imported in LANGUAGE_NONE.
-      return LANGUAGE_NONE;
-    }
-
-    $languages = language_list('enabled');
-
-    return isset($languages[1][$this->config['language']]) ? $this->config['language'] : LANGUAGE_NONE;
+    return entity_get_info($this->entityType());
   }
 
   /**
@@ -241,95 +101,53 @@ abstract class FeedsProcessor extends FeedsPlugin {
    */
   public function process(FeedsSource $source, FeedsParserResult $parser_result) {
     $state = $source->state(FEEDS_PROCESS);
-    if (!isset($state->removeList) && $parser_result->items) {
-      $this->initEntitiesToBeRemoved($source, $state);
-    }
-
-    $skip_new = $this->config['insert_new'] == FEEDS_SKIP_NEW;
-    $skip_existing = $this->config['update_existing'] == FEEDS_SKIP_EXISTING;
 
     while ($item = $parser_result->shiftItem()) {
+      if (!($entity_id = $this->existingEntityId($source, $parser_result)) ||
+           ($this->config['update_existing'] != FEEDS_SKIP_EXISTING)) {
 
-      // Check if this item already exists.
-      $entity_id = $this->existingEntityId($source, $parser_result);
-      // If it's included in the feed, it must not be removed on clean.
-      if ($entity_id) {
-        unset($state->removeList[$entity_id]);
-      }
-
-      module_invoke_all('feeds_before_update', $source, $item, $entity_id);
-
-      // If it exists, and we are not updating, or if it does not exist, and we
-      // are not inserting, pass onto the next item.
-      if (($entity_id && $skip_existing) || (!$entity_id && $skip_new)) {
-        continue;
-      }
-
-      try {
+        // Only proceed if item has actually changed.
         $hash = $this->hash($item);
-        $changed = $hash !== $this->getHash($entity_id);
-
-        // Do not proceed if the item exists, has not changed, and we're not
-        // forcing the update.
-        if ($entity_id && !$changed && !$this->config['skip_hash_check']) {
+        if (!empty($entity_id) && $hash == $this->getHash($entity_id)) {
           continue;
         }
 
-        // Load an existing entity.
-        if ($entity_id) {
-          $entity = $this->entityLoad($source, $entity_id);
+        try {
+          // Assemble node, map item to it, save.
+          if (empty($entity_id)) {
+            $entity = $this->newEntity($source);
+            $this->newItemInfo($entity, $source->feed_nid, $hash);
+          }
+          else {
+            $entity = $this->entityLoad($source, $entity_id);
+            // If an existing item info can't be loaded, create one.
+            if (!$this->loadItemInfo($entity)) {
+              $this->newItemInfo($entity, $source->feed_nid, $hash);
+              $entity->feeds_item->entity_id = $entity_id;
+            }
+          }
+          $this->map($source, $parser_result, $entity);
+          $this->entityValidate($entity);
+          $this->entitySave($entity);
 
-          // The feeds_item table is always updated with the info for the most
-          // recently processed entity. The only carryover is the entity_id.
-          $this->newItemInfo($entity, $source->feed_nid, $hash);
-          $entity->feeds_item->entity_id = $entity_id;
-          $entity->feeds_item->is_new = FALSE;
+          // Track progress.
+          if (empty($entity_id)) {
+            $state->created++;
+          }
+          else {
+            $state->updated++;
+          }
         }
-
-        // Build a new entity.
-        else {
-          $entity = $this->newEntity($source);
-          $this->newItemInfo($entity, $source->feed_nid, $hash);
+        catch (Exception $e) {
+          $state->failed++;
+          drupal_set_message($e->getMessage(), 'warning');
+          $message = $e->getMessage();
+          $message .= '<h3>Original item</h3>';
+          $message .= '<pre>' . var_export($item, true) . '</pre>';
+          $message .= '<h3>Entity</h3>';
+          $message .= '<pre>' . var_export($entity, true) . '</pre>';
+          $source->log('import', $message, array(), WATCHDOG_ERROR);
         }
-
-        // Set property and field values.
-        $this->map($source, $parser_result, $entity);
-        $this->entityValidate($entity);
-
-        // Allow modules to alter the entity before saving.
-        module_invoke_all('feeds_presave', $source, $entity, $item, $entity_id);
-        if (module_exists('rules')) {
-          rules_invoke_event('feeds_import_'. $source->importer()->id, $entity);
-        }
-
-        // Enable modules to skip saving at all.
-        if (!empty($entity->feeds_item->skip)) {
-          continue;
-        }
-
-        // This will throw an exception on failure.
-        $this->entitySaveAccess($entity);
-        $this->entitySave($entity);
-
-        // Allow modules to perform operations using the saved entity data.
-        // $entity contains the updated entity after saving.
-        module_invoke_all('feeds_after_save', $source, $entity, $item, $entity_id);
-
-        // Track progress.
-        if (empty($entity_id)) {
-          $state->created++;
-        }
-        else {
-          $state->updated++;
-        }
-      }
-
-      // Something bad happened, log it.
-      catch (Exception $e) {
-        $state->failed++;
-        drupal_set_message($e->getMessage(), 'warning');
-        list($message, $arguments) = $this->createLogEntry($e, $entity, $item);
-        $source->log('import', $message, $arguments, WATCHDOG_ERROR);
       }
     }
 
@@ -337,10 +155,6 @@ abstract class FeedsProcessor extends FeedsPlugin {
     if ($source->progressImporting() != FEEDS_BATCH_COMPLETE) {
       return;
     }
-    // Remove not included items if needed.
-    // It depends on the implementation of the clean() method what will happen
-    // to items that were no longer in the source.
-    $this->clean($state);
     $info = $this->entityInfo();
     $tokens = array(
       '@entity' => strtolower($info['label']),
@@ -351,8 +165,8 @@ abstract class FeedsProcessor extends FeedsPlugin {
       $messages[] = array(
        'message' => format_plural(
           $state->created,
-          'Created @number @entity.',
-          'Created @number @entities.',
+          'Created @number @entity',
+          'Created @number @entities',
           array('@number' => $state->created) + $tokens
         ),
       );
@@ -361,39 +175,9 @@ abstract class FeedsProcessor extends FeedsPlugin {
       $messages[] = array(
        'message' => format_plural(
           $state->updated,
-          'Updated @number @entity.',
-          'Updated @number @entities.',
+          'Updated @number @entity',
+          'Updated @number @entities',
           array('@number' => $state->updated) + $tokens
-        ),
-      );
-    }
-    if ($state->unpublished) {
-      $messages[] = array(
-        'message' => format_plural(
-            $state->unpublished,
-            'Unpublished @number @entity.',
-            'Unpublished @number @entities.',
-            array('@number' => $state->unpublished) + $tokens
-        ),
-      );
-    }
-    if ($state->blocked) {
-      $messages[] = array(
-        'message' => format_plural(
-          $state->blocked,
-          'Blocked @number @entity.',
-          'Blocked @number @entities.',
-          array('@number' => $state->blocked) + $tokens
-        ),
-      );
-    }
-    if ($state->deleted) {
-      $messages[] = array(
-       'message' => format_plural(
-          $state->deleted,
-          'Removed @number @entity.',
-          'Removed @number @entities.',
-          array('@number' => $state->deleted) + $tokens
         ),
       );
     }
@@ -401,8 +185,8 @@ abstract class FeedsProcessor extends FeedsPlugin {
       $messages[] = array(
        'message' => format_plural(
           $state->failed,
-          'Failed importing @number @entity.',
-          'Failed importing @number @entities.',
+          'Failed importing @number @entity',
+          'Failed importing @number @entities',
           array('@number' => $state->failed) + $tokens
         ),
         'level' => WATCHDOG_ERROR,
@@ -415,63 +199,7 @@ abstract class FeedsProcessor extends FeedsPlugin {
     }
     foreach ($messages as $message) {
       drupal_set_message($message['message']);
-      $source->log('import', $message['message'], array(), isset($message['level']) ? $message['level'] : WATCHDOG_INFO);
-    }
-  }
-
-  /**
-   * Initializes the list of entities to remove.
-   *
-   * This populates $state->removeList with all existing entities previously
-   * imported from the source.
-   *
-   * @param FeedsSource $source
-   *   Source information about this import.
-   * @param FeedsState $state
-   *   The FeedsState object for the given stage.
-   */
-  protected function initEntitiesToBeRemoved(FeedsSource $source, FeedsState $state) {
-    $state->removeList = array();
-
-    // We fill it only if needed.
-    if ($this->config['update_non_existent'] == FEEDS_SKIP_NON_EXISTENT) {
-      return;
-    }
-
-    // Get the full list of entities for this source.
-    $entity_ids = db_select('feeds_item')
-      ->fields('feeds_item', array('entity_id'))
-      ->condition('entity_type', $this->entityType())
-      ->condition('id', $this->id)
-      ->condition('feed_nid', $source->feed_nid)
-      ->condition('hash', $this->config['update_non_existent'], '<>')
-      ->execute()
-      ->fetchCol();
-
-    if (!$entity_ids) {
-      return;
-    }
-
-    $state->removeList = array_combine($entity_ids, $entity_ids);
-  }
-
-  /**
-   * Deletes entities which were not found during processing.
-   *
-   * @todo batch delete?
-   *
-   * @param FeedsState $state
-   *   The FeedsState object for the given stage.
-   */
-  protected function clean(FeedsState $state) {
-    // We clean only if needed.
-    if ($this->config['update_non_existent'] == FEEDS_SKIP_NON_EXISTENT) {
-      return;
-    }
-
-    if ($total = count($state->removeList)) {
-      $this->entityDeleteMultiple($state->removeList);
-      $state->deleted += $total;
+      $source->log('import', $message, array(), isset($message['level']) ? $message['level'] : WATCHDOG_INFO);
     }
   }
 
@@ -490,25 +218,35 @@ abstract class FeedsProcessor extends FeedsPlugin {
     $state = $source->state(FEEDS_PROCESS_CLEAR);
 
     // Build base select statement.
-    $select = db_select('feeds_item')
-      ->fields('feeds_item', array('entity_id'))
-      ->condition('entity_type', $this->entityType())
-      ->condition('id', $this->id)
-      ->condition('feed_nid', $source->feed_nid);
+    $info = $this->entityInfo();
+    $select = db_select($info['base table'], 'e');
+    $select->addField('e', $info['entity keys']['id'], 'entity_id');
+    $select->join(
+      'feeds_item',
+      'fi',
+      "e.{$info['entity keys']['id']} = fi.entity_id AND fi.entity_type = '{$this->entityType()}'");
+    $select->condition('fi.id', $this->id);
+    $select->condition('fi.feed_nid', $source->feed_nid);
 
     // If there is no total, query it.
     if (!$state->total) {
-      $state->total = $select->countQuery()->execute()->fetchField();
+      $state->total = $select->countQuery()
+        ->execute()
+        ->fetchField();
     }
 
     // Delete a batch of entities.
-    $entity_ids = $select->range(0, $this->getLimit())->execute()->fetchCol();
+    $entities = $select->range(0, $this->getLimit())->execute();
+    $entity_ids = array();
+    foreach ($entities as $entity) {
+      $entity_ids[$entity->entity_id] = $entity->entity_id;
+    }
     $this->entityDeleteMultiple($entity_ids);
 
-    // Report progress, take into account that we may not have deleted as many
-    // items as we have counted at first.
-    if ($deleted_count = count($entity_ids)) {
-      $state->deleted += $deleted_count;
+    // Report progress, take into account that we may not have deleted as
+    // many items as we have counted at first.
+    if (count($entity_ids)) {
+      $state->deleted += count($entity_ids);
       $state->progress($state->total, $state->deleted);
     }
     else {
@@ -517,8 +255,6 @@ abstract class FeedsProcessor extends FeedsPlugin {
 
     // Report results when done.
     if ($source->progressClearing() == FEEDS_BATCH_COMPLETE) {
-      $info = $this->entityInfo();
-
       if ($state->deleted) {
         $message = format_plural(
           $state->deleted,
@@ -555,83 +291,23 @@ abstract class FeedsProcessor extends FeedsPlugin {
   }
 
   /**
-   * Deletes feed items older than REQUEST_TIME - $time.
+   * Delete feed items younger than now - $time. Do not invoke expire on a
+   * processor directly, but use FeedsImporter::expire() instead.
    *
-   * Do not invoke expire on a processor directly, but use
-   * FeedsSource::expire() instead.
-   *
-   * @param FeedsSource $source
-   *   The source to expire entities for.
+   * @see FeedsImporter::expire().
+   * @see FeedsDataProcessor::expire().
    *
    * @param $time
-   *   (optional) All items produced by this configuration that are older than
-   *   REQUEST_TIME - $time should be deleted. If NULL, processor should use
-   *   internal configuration. Defaults to NULL.
+   *   If implemented, all items produced by this configuration that are older
+   *   than REQUEST_TIME - $time should be deleted.
+   *   If $time === NULL processor should use internal configuration.
    *
-   * @return float
+   * @return
    *   FEEDS_BATCH_COMPLETE if all items have been processed, a float between 0
    *   and 0.99* indicating progress otherwise.
-   *
-   * @see FeedsSource::expire()
    */
-  public function expire(FeedsSource $source, $time = NULL) {
-    $state = $source->state(FEEDS_PROCESS_EXPIRE);
-
-    if ($time === NULL) {
-      $time = $this->expiryTime();
-    }
-    if ($time == FEEDS_EXPIRE_NEVER) {
-      return;
-    }
-
-    $select = $this->expiryQuery($source, $time);
-
-    // If there is no total, query it.
-    if (!$state->total) {
-      $state->total = $select->countQuery()->execute()->fetchField();
-    }
-
-    // Delete a batch of entities.
-    $entity_ids = $select->range(0, $this->getLimit())->execute()->fetchCol();
-    if ($entity_ids) {
-      $this->entityDeleteMultiple($entity_ids);
-      $state->deleted += count($entity_ids);
-      $state->progress($state->total, $state->deleted);
-    }
-    else {
-      $state->progress($state->total, $state->total);
-    }
-  }
-
-  /**
-   * Returns a database query used to select entities to expire.
-   *
-   * Processor classes should override this method to set the age portion of the
-   * query.
-   *
-   * @param FeedsSource $source
-   *   The feed source.
-   * @param int $time
-   *   Delete entities older than this.
-   *
-   * @return SelectQuery
-   *   A select query to execute.
-   *
-   * @see FeedsNodeProcessor::expiryQuery()
-   */
-  protected function expiryQuery(FeedsSource $source, $time) {
-    // Build base select statement.
-    $info = $this->entityInfo();
-    $id_key = $info['entity keys']['id'];
-
-    $select = db_select($info['base table'], 'e');
-    $select->addField('e', $id_key);
-    $select->join('feeds_item', 'fi', "e.$id_key = fi.entity_id");
-    $select->condition('fi.entity_type', $this->entityType());
-    $select->condition('fi.id', $this->id);
-    $select->condition('fi.feed_nid', $source->feed_nid);
-
-    return $select;
+  public function expire($time = NULL) {
+    return FEEDS_BATCH_COMPLETE;
   }
 
   /**
@@ -639,47 +315,6 @@ abstract class FeedsProcessor extends FeedsPlugin {
    */
   public function itemCount(FeedsSource $source) {
     return db_query("SELECT count(*) FROM {feeds_item} WHERE id = :id AND entity_type = :entity_type AND feed_nid = :feed_nid", array(':id' => $this->id, ':entity_type' => $this->entityType(), ':feed_nid' => $source->feed_nid))->fetchField();
-  }
-
-  /**
-   * Returns a statically cached version of the target mappings.
-   *
-   * @return array
-   *   The targets for this importer.
-   */
-  protected function getCachedTargets() {
-    $targets = &drupal_static('FeedsProcessor::getCachedTargets', array());
-
-    if (!isset($targets[$this->id])) {
-      $targets[$this->id] = $this->getMappingTargets();
-    }
-
-    return $targets[$this->id];
-  }
-
-  /**
-   * Returns a statically cached version of the source mappings.
-   *
-   * @return array
-   *   The sources for this importer.
-   */
-  protected function getCachedSources() {
-    $sources = &drupal_static('FeedsProcessor::getCachedSources', array());
-
-    if (!isset($sources[$this->id])) {
-
-      $sources[$this->id] = feeds_importer($this->id)->parser->getMappingSources();
-
-      if (is_array($sources[$this->id])) {
-        foreach ($sources[$this->id] as $source_key => $source) {
-          if (empty($source['callback']) || !is_callable($source['callback'])) {
-            unset($sources[$this->id][$source_key]['callback']);
-          }
-        }
-      }
-    }
-
-    return $sources[$this->id];
   }
 
   /**
@@ -700,14 +335,23 @@ abstract class FeedsProcessor extends FeedsPlugin {
    * @ingroup mappingapi
    *
    * @see hook_feeds_parser_sources_alter()
-   * @see hook_feeds_processor_targets()
-   * @see hook_feeds_processor_targets_alter()
+   * @see hook_feeds_data_processor_targets_alter()
+   * @see hook_feeds_node_processor_targets_alter()
+   * @see hook_feeds_term_processor_targets_alter()
+   * @see hook_feeds_user_processor_targets_alter()
    */
   protected function map(FeedsSource $source, FeedsParserResult $result, $target_item = NULL) {
-    $targets = $this->getCachedTargets();
-    // Get fields for the entity type we are mapping to.
-    $fields = field_info_instances($this->entityType(), $this->bundle());
 
+    // Static cache $targets as getMappingTargets() may be an expensive method.
+    static $sources;
+    if (!isset($sources[$this->id])) {
+      $sources[$this->id] = feeds_importer($this->id)->parser->getMappingSources();
+    }
+    static $targets;
+    if (!isset($targets[$this->id])) {
+      $targets[$this->id] = $this->getMappingTargets();
+    }
+    $parser = feeds_importer($this->id)->parser;
     if (empty($target_item)) {
       $target_item = array();
     }
@@ -715,94 +359,51 @@ abstract class FeedsProcessor extends FeedsPlugin {
     // Many mappers add to existing fields rather than replacing them. Hence we
     // need to clear target elements of each item before mapping in case we are
     // mapping on a prepopulated item such as an existing node.
-    foreach ($this->getMappings() as $mapping) {
+    foreach ($this->config['mappings'] as $mapping) {
       if (isset($targets[$mapping['target']]['real_target'])) {
-        $target_name = $targets[$mapping['target']]['real_target'];
+        unset($target_item->{$targets[$mapping['target']]['real_target']});
       }
-      else {
-        $target_name = $mapping['target'];
-      }
-
-      // If the target is a field empty the value for the targeted language
-      // only.
-      // In all other cases, just empty the target completely.
-      if (isset($fields[$target_name])) {
-        // Empty the target for the specified language.
-        $target_item->{$target_name}[$mapping['language']] = array();
-      }
-      else {
-        // Empty the whole target.
-        $target_item->{$target_name} = NULL;
+      elseif (isset($target_item->{$mapping['target']})) {
+        unset($target_item->{$mapping['target']});
       }
     }
 
-    // This is where the actual mapping happens: For every mapping we invoke
-    // the parser's getSourceElement() method to retrieve the value of the
-    // source element and pass it to the processor's setTargetElement() to stick
-    // it on the right place of the target item.
-    foreach ($this->getMappings() as $mapping) {
-      $value = $this->getSourceValue($source, $result, $mapping['source']);
+    /*
+    This is where the actual mapping happens: For every mapping we envoke
+    the parser's getSourceElement() method to retrieve the value of the source
+    element and pass it to the processor's setTargetElement() to stick it
+    on the right place of the target item.
 
-      $this->mapToTarget($source, $mapping['target'], $target_item, $value, $mapping);
+    If the mapping specifies a callback method, use the callback instead of
+    setTargetElement().
+    */
+    self::loadMappers();
+    foreach ($this->config['mappings'] as $mapping) {
+      // Retrieve source element's value from parser.
+      if (isset($sources[$this->id][$mapping['source']]) &&
+          is_array($sources[$this->id][$mapping['source']]) &&
+          isset($sources[$this->id][$mapping['source']]['callback']) &&
+          function_exists($sources[$this->id][$mapping['source']]['callback'])) {
+        $callback = $sources[$this->id][$mapping['source']]['callback'];
+        $value = $callback($source, $result, $mapping['source']);
+      }
+      else {
+        $value = $parser->getSourceElement($source, $result, $mapping['source']);
+      }
+
+      // Map the source element's value to the target.
+      if (isset($targets[$this->id][$mapping['target']]) &&
+          is_array($targets[$this->id][$mapping['target']]) &&
+          isset($targets[$this->id][$mapping['target']]['callback']) &&
+          function_exists($targets[$this->id][$mapping['target']]['callback'])) {
+        $callback = $targets[$this->id][$mapping['target']]['callback'];
+        $callback($source, $target_item, $mapping['target'], $value);
+      }
+      else {
+        $this->setTargetElement($source, $target_item, $mapping['target'], $value);
+      }
     }
-
     return $target_item;
-  }
-
-  /**
-   * Returns the values from the parser, or callback.
-   *
-   * @param FeedsSource $source
-   *   The feed source.
-   * @param FeedsParserResult $result
-   *   The parser result.
-   * @param string $source_key
-   *   The current key being processed.
-   *
-   * @return mixed
-   *   A value, or a list of values.
-   */
-  protected function getSourceValue(FeedsSource $source, FeedsParserResult $result, $source_key) {
-    $sources = $this->getCachedSources();
-
-    if (isset($sources[$source_key]['callback'])) {
-      return call_user_func($sources[$source_key]['callback'], $source, $result, $source_key);
-    }
-
-    return feeds_importer($this->id)->parser->getSourceElement($source, $result, $source_key);
-  }
-
-  /**
-   * Maps values onto the target item.
-   *
-   * @param FeedsSource $source
-   *   The feed source.
-   * @param mixed &$target_item
-   *   The target item to apply values into.
-   * @param mixed $value
-   *   A value, or a list of values.
-   * @param array $mapping
-   *   The mapping configuration.
-   */
-  protected function mapToTarget(FeedsSource $source, $target, &$target_item, $value, array $mapping) {
-    $targets = $this->getCachedTargets();
-
-    // Map the source element's value to the target.
-    // If the mapping specifies a callback method, use the callback instead of
-    // setTargetElement().
-    if (isset($targets[$target]['callback'])) {
-
-      // All target callbacks expect an array.
-      if (!is_array($value)) {
-        $value = array($value);
-      }
-
-      call_user_func($targets[$target]['callback'], $source, $target_item, $target, $value, $mapping);
-    }
-
-    else {
-      $this->setTargetElement($source, $target_item, $target, $value, $mapping);
-    }
   }
 
   /**
@@ -817,20 +418,10 @@ abstract class FeedsProcessor extends FeedsPlugin {
    * Declare default configuration.
    */
   public function configDefaults() {
-    $info = $this->entityInfo();
-    $bundle = NULL;
-    if (empty($info['entity keys']['bundle'])) {
-      $bundle = $this->entityType();
-    }
     return array(
       'mappings' => array(),
-      'insert_new' => FEEDS_INSERT_NEW,
       'update_existing' => FEEDS_SKIP_EXISTING,
-      'update_non_existent' => FEEDS_SKIP_NON_EXISTENT,
-      'input_format' => NULL,
-      'skip_hash_check' => FALSE,
-      'bundle' => $bundle,
-      'language' => LANGUAGE_NONE,
+      'input_format' => NULL
     );
   }
 
@@ -840,46 +431,7 @@ abstract class FeedsProcessor extends FeedsPlugin {
   public function configForm(&$form_state) {
     $info = $this->entityInfo();
     $form = array();
-
-    if (!empty($info['entity keys']['bundle'])) {
-      $form['bundle'] = array(
-        '#type' => 'select',
-        '#options' => $this->bundleOptions(),
-        '#title' => !empty($info['bundle name']) ? $info['bundle name'] : t('Bundle'),
-        '#required' => TRUE,
-        '#default_value' => $this->bundle(),
-      );
-    }
-    else {
-      $form['bundle'] = array(
-        '#type' => 'value',
-        '#value' => $this->entityType(),
-      );
-    }
-
-    if (module_exists('locale') && !empty($info['entity keys']['language'])) {
-      $form['language'] = array(
-        '#type' => 'select',
-        '#options' => array(LANGUAGE_NONE => t('Language neutral')) + locale_language_list('name'),
-        '#title' => t('Language'),
-        '#required' => TRUE,
-        '#default_value' => $this->config['language'],
-      );
-    }
-
     $tokens = array('@entities' => strtolower($info['label plural']));
-
-    $form['insert_new'] = array(
-      '#type' => 'radios',
-      '#title' => t('Insert new @entities', $tokens),
-      '#description' => t('New @entities will be determined using mappings that are a "unique target".', $tokens),
-      '#options' => array(
-        FEEDS_INSERT_NEW => t('Insert new @entities', $tokens),
-        FEEDS_SKIP_NEW => t('Do not insert new @entities', $tokens),
-      ),
-      '#default_value' => $this->config['insert_new'],
-    );
-
     $form['update_existing'] = array(
       '#type' => 'radios',
       '#title' => t('Update existing @entities', $tokens),
@@ -887,42 +439,23 @@ abstract class FeedsProcessor extends FeedsPlugin {
         t('Existing @entities will be determined using mappings that are a "unique target".', $tokens),
       '#options' => array(
         FEEDS_SKIP_EXISTING => t('Do not update existing @entities', $tokens),
-        FEEDS_REPLACE_EXISTING => t('Replace existing @entities', $tokens),
         FEEDS_UPDATE_EXISTING => t('Update existing @entities', $tokens),
       ),
       '#default_value' => $this->config['update_existing'],
     );
     global $user;
     $formats = filter_formats($user);
-    foreach ($formats as $format) {
-      $format_options[$format->format] = $format->name;
-    }
-    $form['skip_hash_check'] = array(
-      '#type' => 'checkbox',
-      '#title' => t('Skip hash check'),
-      '#description' => t('Force update of items even if item source data did not change.'),
-      '#default_value' => $this->config['skip_hash_check'],
-    );
+      foreach ($formats as $format) {
+        $format_options[$format->format] = check_plain($format->name);
+      }
     $form['input_format'] = array(
       '#type' => 'select',
       '#title' => t('Text format'),
-      '#description' => t('Select the default input format for the text fields of the nodes to be created.'),
+      '#description' => t('Select the input format for the body field of the nodes to be created.'),
       '#options' => $format_options,
       '#default_value' => isset($this->config['input_format']) ? $this->config['input_format'] : 'plain_text',
       '#required' => TRUE,
     );
-
-    $form['update_non_existent'] = array(
-      '#type' => 'radios',
-      '#title' => t('Action to take when previously imported @entities are missing in the feed', $tokens),
-      '#description' => t('Select how @entities previously imported and now missing in the feed should be updated.', $tokens),
-      '#options' => array(
-        FEEDS_SKIP_NON_EXISTENT => t('Skip non-existent @entities', $tokens),
-        FEEDS_DELETE_NON_EXISTENT => t('Delete non-existent @entities', $tokens),
-      ),
-      '#default_value' => $this->config['update_non_existent'],
-    );
-
     return $form;
   }
 
@@ -930,38 +463,7 @@ abstract class FeedsProcessor extends FeedsPlugin {
    * Get mappings.
    */
   public function getMappings() {
-    $cache = &drupal_static('FeedsProcessor::getMappings', array());
-
-    if (!isset($cache[$this->id])) {
-      $mappings = $this->config['mappings'];
-      $targets = $this->getCachedTargets();
-      $languages = language_list('enabled');
-
-      foreach ($mappings as &$mapping) {
-
-        if (isset($targets[$mapping['target']]['preprocess_callbacks'])) {
-          foreach ($targets[$mapping['target']]['preprocess_callbacks'] as $callback) {
-            call_user_func_array($callback, array($targets[$mapping['target']], &$mapping));
-          }
-        }
-
-        // Ensure there's always a language set.
-        if (empty($mapping['language'])) {
-          $mapping['language'] = LANGUAGE_NONE;
-        }
-        else {
-          // Check if the configured language is available. If not, fallback to
-          // LANGUAGE_NONE.
-          if (!isset($languages[1][$mapping['language']])) {
-            $mapping['language'] = LANGUAGE_NONE;
-          }
-        }
-      }
-
-      $cache[$this->id] = $mappings;
-    }
-
-    return $cache[$this->id];
+    return isset($this->config['mappings']) ? $this->config['mappings'] : array();
   }
 
   /**
@@ -975,16 +477,6 @@ abstract class FeedsProcessor extends FeedsPlugin {
    *   FALSE otherwise.
    */
   public function getMappingTargets() {
-
-    // The bundle has not been selected.
-    if (!$this->bundle()) {
-      $info = $this->entityInfo();
-      $bundle_name = !empty($info['bundle name']) ? drupal_strtolower($info['bundle name']) : t('bundle');
-      $plugin_key = feeds_importer($this->id)->config['processor']['plugin_key'];
-      $url = url('admin/structure/feeds/' . $this->id . '/settings/' . $plugin_key);
-      drupal_set_message(t('Please <a href="@url">select a @bundle_name</a>.', array('@url' => $url, '@bundle_name' => $bundle_name)), 'warning', FALSE);
-    }
-
     return array(
       'url' => array(
         'name' => t('URL'),
@@ -1000,22 +492,6 @@ abstract class FeedsProcessor extends FeedsPlugin {
   }
 
   /**
-   * Allows other modules to expose targets.
-   *
-   * @param array &$targets
-   *   The existing target array.
-   */
-  protected function getHookTargets(array &$targets) {
-    self::loadMappers();
-
-    $entity_type = $this->entityType();
-    $bundle = $this->bundle();
-    $targets += module_invoke_all('feeds_processor_targets', $entity_type, $bundle);
-
-    drupal_alter('feeds_processor_targets', $targets, $entity_type, $bundle);
-  }
-
-  /**
    * Set a concrete target element. Invoked from FeedsProcessor::map().
    *
    * @ingroup mappingapi
@@ -1026,7 +502,6 @@ abstract class FeedsProcessor extends FeedsPlugin {
       case 'guid':
         $target_item->feeds_item->$target_element = $value;
         break;
-
       default:
         $target_item->$target_element = $value;
         break;
@@ -1040,51 +515,36 @@ abstract class FeedsProcessor extends FeedsPlugin {
    *
    * @param FeedsSource $source
    *   The source information about this import.
-   * @param FeedsParserResult $result
+   * @param $result
    *   A FeedsParserResult object.
    *
-   * @return int
+   * @return
    *   The serial id of an entity if found, 0 otherwise.
    */
   protected function existingEntityId(FeedsSource $source, FeedsParserResult $result) {
-    $targets = $this->getCachedTargets();
+    $query = db_select('feeds_item')
+      ->fields('feeds_item', array('entity_id'))
+      ->condition('feed_nid', $source->feed_nid)
+      ->condition('entity_type', $this->entityType())
+      ->condition('id', $source->id);
 
-    $entity_id = 0;
-
-    // Iterate through all unique targets and test whether they already exist in
-    // the database.
+    // Iterate through all unique targets and test whether they do already
+    // exist in the database.
     foreach ($this->uniqueTargets($source, $result) as $target => $value) {
-      if ($target === 'guid' || $target === 'url') {
-        $entity_id = db_select('feeds_item')
-          ->fields('feeds_item', array('entity_id'))
-          ->condition('feed_nid', $source->feed_nid)
-          ->condition('entity_type', $this->entityType())
-          ->condition('id', $source->id)
-          ->condition($target, $value)
-          ->execute()
-          ->fetchField();
+      switch ($target) {
+        case 'url':
+          $entity_id = $query->condition('url', $value)->execute()->fetchField();
+          break;
+        case 'guid':
+          $entity_id = $query->condition('guid', $value)->execute()->fetchField();
+          break;
       }
-
-      if (!$entity_id && !empty($targets[$target]['unique_callbacks'])) {
-        if (!is_array($value)) {
-          $value = array($value);
-        }
-
-        foreach ($targets[$target]['unique_callbacks'] as $callback) {
-          if ($entity_id = call_user_func($callback, $source, $this->entityType(), $this->bundle(), $target, $value)) {
-            // Stop at the first unique ID returned by a callback.
-            break;
-          }
-        }
-      }
-
-      // Return with the content id found.
-      if ($entity_id) {
+      if (isset($entity_id)) {
+        // Return with the content id found.
         return $entity_id;
       }
     }
-
-    return $entity_id;
+    return 0;
   }
 
 
@@ -1102,8 +562,8 @@ abstract class FeedsProcessor extends FeedsPlugin {
   protected function uniqueTargets(FeedsSource $source, FeedsParserResult $result) {
     $parser = feeds_importer($this->id)->parser;
     $targets = array();
-    foreach ($this->getMappings() as $mapping) {
-      if (!empty($mapping['unique'])) {
+    foreach ($this->config['mappings'] as $mapping) {
+      if ($mapping['unique']) {
         // Invoke the parser's getSourceElement to retrieve the value for this
         // mapping's source.
         $targets[$mapping['target']] = $parser->getSourceElement($source, $result, $mapping['source']);
@@ -1124,7 +584,6 @@ abstract class FeedsProcessor extends FeedsPlugin {
    */
   protected function newItemInfo($entity, $feed_nid, $hash = '') {
     $entity->feeds_item = new stdClass();
-    $entity->feeds_item->is_new = TRUE;
     $entity->feeds_item->entity_id = 0;
     $entity->feeds_item->entity_type = $this->entityType();
     $entity->feeds_item->id = $this->id;
@@ -1160,135 +619,27 @@ abstract class FeedsProcessor extends FeedsPlugin {
    * Include mappings as a change in mappings may have an affect on the item
    * produced.
    *
-   * @return string
-   *   A hash is always returned, even when the item is empty, NULL or FALSE.
+   * @return Always returns a hash, even with empty, NULL, FALSE:
+   *  Empty arrays return 40cd750bba9870f18aada2478b24840a
+   *  Empty/NULL/FALSE strings return d41d8cd98f00b204e9800998ecf8427e
    */
   protected function hash($item) {
-    $sources = feeds_importer($this->id)->parser->getMappingSourceList();
-    $mapped_item = array_intersect_key($item, array_flip($sources));
-    return hash('md5', serialize($mapped_item) . serialize($this->getMappings()));
+    static $serialized_mappings;
+    if (!$serialized_mappings) {
+      $serialized_mappings = serialize($this->config['mappings']);
+    }
+    return hash('md5', serialize($item) . $serialized_mappings);
   }
 
   /**
-   * Retrieves the MD5 hash of $entity_id from the database.
-   *
-   * @return string
-   *   Empty string if no item is found, hash otherwise.
+   * Retrieve MD5 hash of $entity_id from DB.
+   * @return Empty string if no item is found, hash otherwise.
    */
   protected function getHash($entity_id) {
-
     if ($hash = db_query("SELECT hash FROM {feeds_item} WHERE entity_type = :type AND entity_id = :id", array(':type' => $this->entityType(), ':id' => $entity_id))->fetchField()) {
       // Return with the hash.
       return $hash;
     }
     return '';
   }
-
-  /**
-   * DEPRECATED: Creates a log message for exceptions during import.
-   *
-   * Don't use this method as it concatenates user variables into the log
-   * message, which will pollute the locales_source table when the log message
-   * is translated. Use ::createLogEntry instead.
-   *
-   * @param Exception $e
-   *   The exception that was throwned during processing the item.
-   * @param $entity
-   *   The entity object.
-   * @param $item
-   *   The parser result for this entity.
-   *
-   * @return string
-   *   The message to log.
-   *
-   * @deprecated
-   *   Use ::createLogEntry instead.
-   */
-  protected function createLogMessage(Exception $e, $entity, $item) {
-    $message = $e->getMessage();
-    $message .= '<h3>Original item</h3>';
-    // $this->exportObjectVars() already runs check_plain() for us, so we can
-    // concatenate here as is.
-    $message .= '<pre>' . $this->exportObjectVars($item) . '</pre>';
-    $message .= '<h3>Entity</h3>';
-    $message .= '<pre>' . $this->exportObjectVars($entity) . '</pre>';
-
-    return $message;
-  }
-
-  /**
-   * Creates a log entry for when an exception occurred during import.
-   *
-   * @param Exception $e
-   *   The exception that was throwned during processing the item.
-   * @param object $entity
-   *   The entity object.
-   * @param array $item
-   *   The parser result for this entity.
-   *
-   * @return array
-   *   The message and arguments to log.
-   */
-  protected function createLogEntry(Exception $e, $entity, $item) {
-    $message = '@exception';
-    $message .= '<h3>Original item</h3>';
-    $message .= '<pre>!item</pre>';
-    $message .= '<h3>Entity</h3>';
-    $message .= '<pre>!entity</pre>';
-    $arguments = array(
-      '@exception' => $e->getMessage(),
-      // $this->exportObjectVars() already runs check_plain() for us, so we can
-      // use the "!" placeholder.
-      '!item' => $this->exportObjectVars($item),
-      '!entity' => $this->exportObjectVars($entity),
-    );
-
-    return array($message, $arguments);
-  }
-
-  /**
-   * Returns a string representation of an object or array for log messages.
-   *
-   * @param object|array $object
-   *   The object to convert.
-   *
-   * @return string
-   *   The sanitized string representation of the object.
-   */
-  protected function exportObjectVars($object) {
-    include_once DRUPAL_ROOT . '/includes/utility.inc';
-
-    $out = is_array($object) ? $object : get_object_vars($object);
-    $out = array_filter($out, 'is_scalar');
-
-    foreach ($out as $key => $value) {
-      if (is_string($value)) {
-        $out[$key] = truncate_utf8($value, 100, FALSE, TRUE);
-      }
-    }
-
-    if (is_array($object)) {
-      return check_plain(drupal_var_export($out));
-    }
-
-    return check_plain(drupal_var_export((object) $out));
-  }
-
-  /**
-   * Overrides FeedsPlugin::dependencies().
-   */
-  public function dependencies() {
-    $dependencies = parent::dependencies();
-
-    // Find out which module defined the entity type.
-    $info = $this->entityInfo();
-    if (isset($info['module'])) {
-      $dependencies[$info['module']] = $info['module'];
-    }
-
-    return $dependencies;
-  }
-
 }
-
-class FeedsProcessorBundleNotDefined extends Exception {}

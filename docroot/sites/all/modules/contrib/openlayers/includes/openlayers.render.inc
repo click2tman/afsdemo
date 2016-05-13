@@ -1,4 +1,5 @@
 <?php
+// $Id: openlayers.render.inc,v 1.3.2.18.2.3 2010/12/08 14:21:03 tmcw Exp $
 
 /**
  * @file
@@ -19,46 +20,17 @@
 function _openlayers_layers_process($layers = array(), &$map = array()) {
   $layer_data = array();
 
-  // Load Layers and assign weights
-  foreach ($layers as $key => $layer) {
+  $weight = 0;
+  foreach ($layers as $layer) {
     if ($layer_object = openlayers_layer_load($layer)) {
-      $layers[$key] = $layer_object;
-      if (!empty($map['layer_weight'][$key])) {
-        $layers[$key]->weight = $map['layer_weight'][$key];
-      }
-      else $layers[$key]->weight = 0;
-    }
-    else unset($layers[$key]);
-  }
-
-  // Sort layers
-  usort($layers, '_openlayers_layers_process_sort');
-
-  // Process into array-based layer data for the map
-  foreach ($layers as $type => $layer_object) {
-    if (is_object($layer_object)) {
       $layer_object->render($map);
       $layer_object->data['title'] = $layer_object->title;
-      $layer_object->data['weight'] = $layer_object->weight;
+      $layer_object->data['weight'] = ++$weight;
       $layer_data[$layer_object->name] = $layer_object->data;
     }
   }
 
   return $layer_data;
-}
-
-/**
- * Callback function for sorting
- *
- * @param $a
- *   Layer $a
- * @param $b
- *   Layer $b
- * @return $a_greater_b
- *   Return the weight different - allowing usort to sort
- */
-function _openlayers_layers_process_sort($a, $b) {
-  return intval($a->weight - $b->weight);
 }
 
 /**
@@ -73,7 +45,7 @@ function _openlayers_layers_process_sort($a, $b) {
  */
 function _openlayers_behaviors_render($behaviors = array(), &$map = array()) {
   $rendered = array();
-
+  
   foreach (openlayers_behaviors() as $key => $plugin) {
     if (isset($behaviors[$key]) && $class = ctools_plugin_get_class($plugin, 'behavior')) {
       $behavior = new $class($behaviors[$key], $map);
@@ -87,27 +59,21 @@ function _openlayers_behaviors_render($behaviors = array(), &$map = array()) {
 /**
  * Process Styles
  *
- * Get full data for any styles.  The idea is that we load
- * all the needed styles into the ['styles'] key of the
- * map object, and keep a reference in ['layer_styles']
- * and ['layer_styles_select'] for layer specific styling.
+ * Get full data for any styles
  *
- * TODO: Overall, this is not a great approach to managing
- * styles.
+ * TODO: KILL KILL KILL
  *
  * @param $styles
  *   Array of map styles ( <style_role> : <style_name> | <style_array> )
  * @param $layer_styles
- *   Array of layer styles ( <layer_name> : <style_name> )
- * @param $layer_styles_select
  *   Array of layer styles ( <layer_name> : <style_name> )
  * @param $map
  *   Map array
  * @return $processed
  *   Array of processed styles ( <style_name> => <style_array> )
  */
-function _openlayers_styles_process($styles = array(),
-  $layer_styles = array(), $layer_styles_select = array(), $layer_styles_temporary = array(), &$map = array()) {
+function _openlayers_styles_process($styles = array(), 
+  $layer_styles = array(), &$map = array()) {
 
   // Get styles info array
   $styles_info = openlayers_styles();
@@ -125,47 +91,17 @@ function _openlayers_styles_process($styles = array(),
   }
 
   // Add layer styles
-  foreach ($layer_styles as $key => $style) {
-    if (!isset($processed[$style]) &&
-        !empty($styles_info[$style]) &&
+  foreach ($layer_styles as $style) {
+    if (!isset($processed[$style]) && 
+        !empty($styles_info[$style]) && 
         $info = $styles_info[$style]->data) {
       $processed[$style] = $info;
-    }
-    if (empty($style)) {
-      // If a particular layer's style is 0, set it to the appropriate default.
-      $map['layer_styles'][$key] = 'default';
-    }
-  }
-
-  // Add layer styles select
-  foreach ($layer_styles_select as $key => $style) {
-    if (!isset($processed[$style]) &&
-        !empty($styles_info[$style]) &&
-        $info = $styles_info[$style]->data) {
-      $processed[$style] = $info;
-    }
-    if (empty($style)) {
-      // If a particular layer's style is 0, set it to the appropriate default.
-      $map['layer_styles_select'][$key] = 'select';
-    }
-  }
-
-  // Add layer styles temporary
-  foreach ($layer_styles_temporary as $key => $style) {
-    if (!isset($processed[$style]) &&
-      !empty($styles_info[$style]) &&
-      $info = $styles_info[$style]->data) {
-      $processed[$style] = $info;
-    }
-    if (empty($style)) {
-      // If a particular layer's style is 0, set it to the appropriate default.
-      $map['layer_styles_temporary'][$key] = 'temporary';
     }
   }
 
   // Run through theme function
   $processed = theme('openlayers_styles', array(
-    'styles' => $processed,
+    'styles' => $processed, 
     'map' => $map)
   );
 
@@ -185,5 +121,5 @@ function _openlayers_styles_process($styles = array(),
  *   New map id
  */
 function _openlayers_create_map_id() {
-  return drupal_html_id('openlayers-map');
+  return 'openlayers-map-' . substr(md5(uniqid(mt_rand())), 0, 8);
 }

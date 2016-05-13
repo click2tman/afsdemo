@@ -1,4 +1,5 @@
 <?php
+// $Id: opml_parser.inc,v 1.4 2010/03/29 02:55:50 alexb Exp $
 
 /**
  * @file
@@ -34,7 +35,7 @@ function opml_parser_parse($raw) {
         $item['title'] = $item['text'];
       }
       else {
-        $item['title'] = trim(substr($item['text'], 0, 30)) . ' ...';
+        $item['title'] = trim(substr($item['text'], 0, 30)) .' ...';
       }
     }
     if (isset($item['title']) && isset($item['xmlurl'])) {

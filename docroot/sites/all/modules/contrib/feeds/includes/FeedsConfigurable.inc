@@ -1,4 +1,5 @@
 <?php
+// $Id: FeedsConfigurable.inc,v 1.19.2.2 2010/09/30 19:16:27 alexb Exp $
 
 /**
  * @file
@@ -15,10 +16,6 @@ class FeedsNotExistingException extends Exception {
  * Base class for configurable classes. Captures configuration handling, form
  * handling and distinguishes between in-memory configuration and persistent
  * configuration.
- *
- * Due to the magic method __get(), protected properties from this class and
- * from classes that extend this class will be publicly readable (but not
- * writeable).
  */
 abstract class FeedsConfigurable {
 
@@ -48,20 +45,17 @@ abstract class FeedsConfigurable {
   protected $disabled;
 
   /**
-   * Instantiates a FeedsConfigurable object.
+   * Instantiate a FeedsConfigurable object.
    *
-   * Don't use directly, use feeds_importer() or feeds_plugin() instead.
-   *
-   * @see feeds_importer()
-   * @see feeds_plugin()
+   * Don't use directly, use feeds_importer() or feeds_plugin()
+   * instead.
    */
   public static function instance($class, $id) {
-    if (!strlen($id)) {
-      throw new InvalidArgumentException(t('Empty configuration identifier.'));
+    // This is useful at least as long as we're developing.
+    if (empty($id)) {
+      throw new Exception(t('Empty configuration identifier.'));
     }
-
-    $instances = &drupal_static(__METHOD__, array());
-
+    static $instances = array();
     if (!isset($instances[$class][$id])) {
       $instances[$class][$id] = new $class($id);
     }
@@ -80,13 +74,6 @@ abstract class FeedsConfigurable {
     // Make sure configuration is populated.
     $this->config = $this->configDefaults();
     $this->disabled = FALSE;
-  }
-
-  /**
-   * Override magic method __isset(). This is needed due to overriding __get().
-   */
-  public function __isset($name) {
-    return isset($this->$name) ? TRUE : FALSE;
   }
 
   /**
@@ -143,13 +130,8 @@ abstract class FeedsConfigurable {
   }
 
   /**
-   * Overrides magic method __get().
-   *
-   * - Makes sure that external reads of FeedsConfigurable::config go through
-   *   ::getConfig();
-   * - Makes private and protected properties from this class and protected
-   *   properties from child classes publicly readable.
-   * - Prevents warnings when accessing non-existent properties.
+   * Override magic method __get(). Make sure that $this->config goes
+   * through getConfig()
    */
   public function __get($name) {
     if ($name == 'config') {
@@ -179,17 +161,6 @@ abstract class FeedsConfigurable {
    */
   public function configDefaults() {
     return array();
-  }
-
-  /**
-   * Returns whether or not the configurable has a config form.
-   *
-   * @return bool
-   *   True if the configurable has a config form, and false if not.
-   */
-  public function hasConfigForm() {
-    $form_state = array();
-    return (bool) $this->configForm($form_state);
   }
 
   /**
@@ -225,16 +196,6 @@ abstract class FeedsConfigurable {
     drupal_set_message(t('Your changes have been saved.'));
     feeds_cache_clear(FALSE);
   }
-
-  /**
-   * Returns an array of required modules.
-   *
-   * @return array
-   *   The modules that this configurable requires.
-   */
-  public function dependencies() {
-    return array();
-  }
 }
 
 /**
@@ -251,7 +212,7 @@ abstract class FeedsConfigurable {
  */
 function feeds_get_form($configurable, $form_method) {
   if (method_exists($configurable, $form_method)) {
-    return drupal_get_form(get_class($configurable) . '_feeds_form', $configurable, $form_method);
+    return drupal_get_form(get_class($configurable) .'_feeds_form', $configurable, $form_method);
   }
 }
 
@@ -286,42 +247,18 @@ function feeds_form($form, &$form_state, $configurable, $form_method) {
  * Validation handler for feeds_form().
  */
 function feeds_form_validate($form, &$form_state) {
-  _feeds_form_helper($form, $form_state, 'Validate');
+  $validate_method = $form['#feeds_form_method'] .'Validate';
+  if (method_exists($form['#configurable'], $validate_method)) {
+    $form['#configurable']->$validate_method($form_state['values']);
+  }
 }
 
 /**
- * Submit handler for feeds_form().
+ * Submit handler for feeds_config_form().
  */
 function feeds_form_submit($form, &$form_state) {
-  _feeds_form_helper($form, $form_state, 'Submit');
-}
-
-/**
- * Helper for Feeds validate and submit callbacks.
- *
- * @todo This is all terrible. Remove.
- */
-function _feeds_form_helper($form, &$form_state, $action) {
-  $method = $form['#feeds_form_method'] . $action;
-  $class = get_class($form['#configurable']);
-  $id = $form['#configurable']->id;
-
-  // Re-initialize the configurable object. Using feeds_importer() and
-  // feeds_plugin() will ensure that we're using the same instance. We can't
-  // reuse the previous form instance because feeds_importer() is used to save.
-  // This will re-initialize all of the plugins anyway, causing some tricky
-  // saving issues in certain cases.
-  // See http://drupal.org/node/1672880.
-  if ($class == variable_get('feeds_importer_class', 'FeedsImporter')) {
-    $form['#configurable'] = feeds_importer($id);
-  }
-  else {
-    $importer = feeds_importer($id);
-    $plugin_key = $importer->config[$form['#configurable']->pluginType()]['plugin_key'];
-    $form['#configurable'] = feeds_plugin($plugin_key, $id);
-  }
-
-  if (method_exists($form['#configurable'], $method)) {
-    $form['#configurable']->$method($form_state['values']);
+  $submit_method = $form['#feeds_form_method'] .'Submit';
+  if (method_exists($form['#configurable'], $submit_method)) {
+    $form['#configurable']->$submit_method($form_state['values']);
   }
 }

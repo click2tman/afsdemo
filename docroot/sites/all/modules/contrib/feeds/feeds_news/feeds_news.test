@@ -1,4 +1,5 @@
 <?php
+// $Id: feeds_news.test,v 1.2.4.4 2010/10/06 14:12:42 alexb Exp $
 
 /**
  * @file
@@ -9,17 +10,22 @@
  * Test Feed configuration.
  */
 class FeedsExamplesFeedTestCase extends FeedsWebTestCase {
-  public static function getInfo() {
+  /**
+   * Describe this test.
+   */
+  public function getInfo() {
     return array(
-      'name' => 'Feature: Feed',
-      'description' => 'Test "Feed" default configuration.',
-      'group' => 'Feeds',
-      'dependencies' => array('features', 'views'),
+      'name' => t('Feature: Feed'),
+      'description' => t('Test "Feed" default configuration.'),
+      'group' => t('Feeds'),
     );
   }
 
+  /**
+   * Enable feeds_news feature.
+   */
   public function setUp() {
-    parent::setUp(array('features', 'views', 'feeds_news'));
+    parent::setUp(array('feeds_news'));
   }
 
   /**
@@ -27,13 +33,6 @@ class FeedsExamplesFeedTestCase extends FeedsWebTestCase {
    */
   public function test() {
     $nid = $this->createFeedNode('feed', NULL, '', 'feed');
-
-    // Assert menu tabs for feed nodes does not show up on non-feed nodes.
-    $this->drupalGet("node/{$nid}/feed-items");
-    $this->assertResponse(200);
-    $not_feed_node = $this->drupalCreateNode();
-    $this->drupalGet("node/{$not_feed_node->nid}/feed-items");
-    $this->assertResponse(404);
 
     // Assert results.
     $count = db_query("SELECT COUNT(*) FROM {node} WHERE type = 'feed_item'")->fetchField();
@@ -61,15 +60,15 @@ class FeedsExamplesFeedTestCase extends FeedsWebTestCase {
     $this->assertEqual($count, 1, 'Found feed_node_item record.');
 
     // Remove all items
-    $this->drupalPost("node/$nid/delete-items", array(), 'Delete');
+    $this->drupalPost('node/'. $nid .'/delete-items', array(), 'Delete');
     $this->assertText('Deleted 10 nodes');
 
     // Import again.
-    $this->drupalPost("node/$nid/import", array(), 'Import');
+    $this->drupalPost('node/'. $nid .'/import', array(), 'Import');
     $this->assertText('Created 10 nodes');
 
     // Delete and assert all items gone.
-    $this->drupalPost("node/$nid/delete-items", array(), 'Delete');
+    $this->drupalPost('node/'. $nid .'/delete-items', array(), 'Delete');
 
     $count = db_query("SELECT COUNT(*) FROM {node} WHERE type = 'feed_item'")->fetchField();
     $this->assertEqual($count, 0, 'Found the correct number of feed item nodes in database.');
@@ -90,12 +89,14 @@ class FeedsExamplesFeedTestCase extends FeedsWebTestCase {
  * Test OPML import configuration.
  */
 class FeedsExamplesOPMLTestCase extends FeedsWebTestCase {
-
-  public static function getInfo() {
+  /**
+   * Describe this test.
+   */
+  public function getInfo() {
     return array(
-      'name' => 'Feature: OPML import',
-      'description' => 'Test "OPML import" default configuration.',
-      'group' => 'Feeds',
+      'name' => t('Feature: OPML import'),
+      'description' => t('Test "OPML import" default configuration.'),
+      'group' => t('Feeds'),
     );
   }
 

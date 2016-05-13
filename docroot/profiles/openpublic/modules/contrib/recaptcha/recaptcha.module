@@ -10,17 +10,14 @@
  */
 function recaptcha_help($path, $arg) {
   $output = '';
-
   switch ($path) {
     case 'admin/modules#name':
       $output .= t('reCAPTCHA');
       break;
-
     case 'admin/modules#description':
     case 'admin/user/captcha/recaptcha':
       $output .= t('Uses the <a href="@url" target="_blank">reCAPTCHA</a> web service to improve the CAPTCHA system and protect email addresses.', array('@url' => url('https://www.google.com/recaptcha')));
       break;
-
     case 'admin/help#recaptcha':
       $output .= '<p>' .
         t('Uses the reCAPTCHA web service to improve the CAPTCHA module and protect email addresses. For more information on what reCAPTCHA is, visit <a href="@url" target="_blank">the official website</a>.', array('@url' => url('https://www.google.com/recaptcha'))) .
@@ -31,7 +28,6 @@ function recaptcha_help($path, $arg) {
         '</p>';
       break;
   }
-
   return $output;
 }
 
@@ -67,12 +63,15 @@ function recaptcha_permission() {
 /**
  * Implements hook_captcha().
  */
-function recaptcha_captcha($op, $captcha_type = '') {
+function recaptcha_captcha() {
+  $args = func_get_args();
+  $op = array_shift($args);
   switch ($op) {
     case 'list':
       return array('reCAPTCHA');
 
     case 'generate':
+      $captcha_type = array_shift($args);
       $captcha = array();
       if ($captcha_type == 'reCAPTCHA') {
         // Retrieve configuration variables.
@@ -83,8 +82,8 @@ function recaptcha_captcha($op, $captcha_type = '') {
 
         // Test if reCAPTCHA can be used, falling back to Math if it is not
         // configured, the library won't load, or the server is down.
-        if (!$recaptcha_public_key || !_recaptcha_load_library() || !_recaptcha_server_is_up()) {
-          return captcha_captcha('generate', 'Math');
+        if (!$recaptcha_public_key || !_recaptcha_load_library() || !_recaptcha_test_recaptcha_server()) {
+          return captcha_captcha('generate', 'Math', $args);
         }
 
         if ($recaptcha_ajax_api) {
@@ -103,7 +102,7 @@ function recaptcha_captcha($op, $captcha_type = '') {
         global $language;
         if (isset($language->language)) {
           // reCAPTCHA uses two-character language codes, so 'pt-br' must be
-          // passed as 'pt'.
+          // passed as 'pt'; cf. https://developers.google.com/recaptcha/docs/customization#i18n
           $recaptcha_options['lang'] = drupal_substr($language->language, 0, 2);
         }
 
@@ -170,53 +169,23 @@ function recaptcha_captcha($op, $captcha_type = '') {
 }
 
 /**
- * Test whether the reCAPTCHA server is up.
- *
- * @return bool
- *   TRUE if the reCAPTCHA server is up, FALSE otherwise.
+ * @return boolean
+ *   Whether or not the reCAPTCHA server is up.
  */
 function _recaptcha_test_recaptcha_server() {
-  $response = drupal_http_request('https://' . RECAPTCHA_VERIFY_SERVER);
-  if (empty($response->error)) {
+  $fs = @fsockopen(RECAPTCHA_VERIFY_SERVER, 80, $errno, $errstr, 10);
+  if ($fs) {
+    fclose($fs);
     return TRUE;
   }
   else {
-    watchdog('reCAPTCHA', 'Unable to connect with the reCAPTCHA server (@server): @errno: @errstr', array(
+    drupal_set_message(t('Unable to connect with the reCAPTCHA server (@server): @errno: @errstr', array(
       '@server' => RECAPTCHA_VERIFY_SERVER,
-      '@errno' => $response->code,
-      '@errstr' => $response->error,
-    ), WATCHDOG_ERROR);
+      '@errno' => $errno,
+      '@errstr' => $errstr,
+    )), 'error');
     return FALSE;
   }
-}
-
-/**
- * Return the cached output of _recaptcha_test_recaptcha_server().
- *
- * @return bool
- *   TRUE if the reCAPTCHA server was up last time it was checked, FALSE
- *   otherwise.
- */
-function _recaptcha_server_is_up() {
-  static $server_status;
-  // Use static cache value, if available.
-  if (isset($server_status)) {
-    return $server_status;
-  }
-  // Check if the status is cached already.
-  $status_cache = cache_get('recaptcha_server_status');
-  if ($status_cache !== FALSE) {
-    $server_status = (bool) $status_cache;
-    return $server_status;
-  }
-  // Status is not cached. Check if server is up.
-  $server_status = _recaptcha_test_recaptcha_server();
-
-  // Set to 5 minutes, if interval is not set.
-  $cache_period = variable_get('recaptcha_server_status_check_interval', 5);
-  // Save it as integer as cache_get returns FALSE, if not found.
-  cache_set('recaptcha_server_status', (int) $server_status, 'cache', time() + ($cache_period * 60));
-  return $server_status;
 }
 
 /**
@@ -226,7 +195,7 @@ function recaptcha_captcha_validation($solution = NULL, $response = NULL) {
   global $user;
   $recaptcha_private_key = variable_get('recaptcha_private_key', FALSE);
   $ip_address = ip_address();
-  if ($recaptcha_private_key && $ip_address && $response === 'reCAPTCHA' && !empty($_POST['recaptcha_challenge_field']) && !empty($_POST['recaptcha_response_field']) && _recaptcha_server_is_up()) {
+  if ($recaptcha_private_key && $ip_address && $response === 'reCAPTCHA' && !empty($_POST['recaptcha_challenge_field']) && !empty($_POST['recaptcha_response_field']) && _recaptcha_test_recaptcha_server()) {
     $resp = recaptcha_check_answer(
       $recaptcha_private_key,
       $ip_address,

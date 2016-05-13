@@ -1,4 +1,5 @@
 <?php
+// $Id: FeedsImporter.inc,v 1.31.2.8 2010/12/20 20:03:07 alexb Exp $
 
 /**
  * @file
@@ -55,6 +56,49 @@ class FeedsImporter extends FeedsConfigurable {
   }
 
   /**
+   * Remove items older than $time.
+   *
+   * @param $time
+   *   All items older than REQUEST_TIME - $time will be deleted. If not
+   *   given, internal processor settings will be used.
+   *
+   * @return
+   *   FEEDS_BATCH_COMPLETE if the expiry process finished. A decimal between
+   *   0.0 and 0.9 periodic if expiry is still in progress.
+   *
+   * @throws
+   *   Throws Exception if an error occurs when expiring items.
+   */
+  public function expire($time = NULL) {
+    return $this->processor->expire($time);
+  }
+
+  /**
+   * Schedule all periodic tasks for this importer.
+   */
+  public function schedule() {
+    $this->scheduleExpire();
+  }
+
+  /**
+   * Schedule expiry of items.
+   */
+  public function scheduleExpire() {
+    $job = array(
+      'type' => $this->id,
+      'period' => 0,
+      'periodic' => TRUE,
+    );
+    if (FEEDS_EXPIRE_NEVER != $this->processor->expiryTime()) {
+      $job['period'] = 3600;
+      JobScheduler::get('feeds_importer_expire')->set($job);
+    }
+    else {
+      JobScheduler::get('feeds_importer_expire')->remove($job);
+    }
+  }
+
+  /**
    * Report how many items *should* be created on one page load by this
    * importer.
    *
@@ -80,20 +124,14 @@ class FeedsImporter extends FeedsConfigurable {
     $save = new stdClass();
     $save->id = $this->id;
     $save->config = $this->getConfig();
-
-    if ($config = db_query("SELECT config FROM {feeds_importer} WHERE id = :id", array(':id' => $this->id))->fetchField()) {
+    if (db_query_range("SELECT 1 FROM {feeds_importer} WHERE id = :id", 0, 1, array(':id' => $this->id))->fetchField()) {
       drupal_write_record('feeds_importer', $save, 'id');
-      // Only rebuild menu if content_type has changed. Don't worry about
-      // rebuilding menus when creating a new importer since it will default
-      // to the standalone page.
-      $config = unserialize($config);
-      if ($config['content_type'] != $save->config['content_type']) {
-        variable_set('menu_rebuild_needed', TRUE);
-      }
     }
     else {
       drupal_write_record('feeds_importer', $save);
     }
+    // Clear menu cache, changes to importer can change menu items.
+    menu_rebuild();
   }
 
   /**
@@ -112,17 +150,23 @@ class FeedsImporter extends FeedsConfigurable {
   }
 
   /**
-   * Deletes configuration.
-   *
-   * Removes configuration information from database, does not delete
-   * configuration itself.
+   * Delete configuration. Removes configuration information
+   * from database, does not delete configuration itself.
    */
   public function delete() {
     db_delete('feeds_importer')
       ->condition('id', $this->id)
       ->execute();
-
-    feeds_reschedule($this->id);
+    $job = array(
+      'type' => $this->id,
+      'id' => 0,
+    );
+    if ($this->export_type & EXPORT_IN_CODE) {
+      feeds_reschedule($this->id);
+    }
+    else {
+      JobScheduler::get('feeds_importer_expire')->remove($job);
+    }
   }
 
   /**
@@ -270,17 +314,6 @@ class FeedsImporter extends FeedsConfigurable {
       feeds_reschedule($this->id);
     }
     parent::configFormSubmit($values);
-  }
-
-  /**
-   * Implements FeedsConfigurable::dependencies().
-   */
-  public function dependencies() {
-    $dependencies = parent::dependencies();
-    foreach ($this->plugin_types as $plugin_type) {
-      $dependencies = array_merge($dependencies, $this->$plugin_type->dependencies());
-    }
-    return $dependencies;
   }
 }
 

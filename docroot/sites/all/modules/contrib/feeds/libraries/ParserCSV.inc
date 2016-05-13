@@ -1,9 +1,8 @@
 <?php
+// $Id: ParserCSV.inc,v 1.4 2010/07/10 23:45:36 alexb Exp $
 
 /**
- * @file
  * Contains CSV Parser.
- *
  * Functions in this file are independent of the Feeds specific implementation.
  * Thanks to jpetso http://drupal.org/user/56020 for most of the code in this
  * file.
@@ -66,8 +65,6 @@ class ParserCSVIterator implements Iterator {
  */
 class ParserCSV {
   private $delimiter;
-  private $fromEncoding;
-  private $toEncoding;
   private $skipFirstLine;
   private $columnNames;
   private $timeout;
@@ -75,12 +72,9 @@ class ParserCSV {
   private $startByte;
   private $lineLimit;
   private $lastLinePos;
-  private $useMbString;
 
   public function __construct() {
     $this->delimiter = ',';
-    $this->fromEncoding = 'UTF-8';
-    $this->toEncoding = 'UTF-8';
     $this->skipFirstLine = FALSE;
     $this->columnNames = FALSE;
     $this->timeout = FALSE;
@@ -88,10 +82,6 @@ class ParserCSV {
     $this->startByte = 0;
     $this->lineLimit = 0;
     $this->lastLinePos = 0;
-    ini_set('auto_detect_line_endings', TRUE);
-    if (extension_loaded('mbstring') && variable_get('feeds_use_mbstring', TRUE)) {
-      $this->useMbString = TRUE;
-    }
   }
 
   /**
@@ -100,18 +90,6 @@ class ParserCSV {
    */
   public function setDelimiter($delimiter) {
     $this->delimiter = $delimiter;
-  }
-
-  /**
-   * Sets the source file encoding.
-   *
-   * By default, the encoding is UTF-8.
-   *
-   * @param string $encoding
-   *   The encoding to set.
-   */
-  public function setEncoding($encoding) {
-    $this->fromEncoding = $encoding;
   }
 
   /**
@@ -178,7 +156,7 @@ class ParserCSV {
    *  reached the timeout set with setTimeout() or the line limit set with
    *  setLineLimit().
    *
-   * @see ParserCSV::setStartByte()
+   * @see ParserCSV::setStartByte($start);
    */
   public function lastLinePos() {
     return $this->lastLinePos;
@@ -217,7 +195,7 @@ class ParserCSV {
     for ($lineIterator->rewind($this->startByte); $lineIterator->valid(); $lineIterator->next()) {
 
       // Make really sure we've got lines without trailing newlines.
-      $line = trim($this->fixEncoding($lineIterator->current()), "\r\n");
+      $line = trim($lineIterator->current(), "\r\n");
 
       // Skip empty lines.
       if (empty($line)) {
@@ -237,8 +215,6 @@ class ParserCSV {
       $currentField = '';
       $fields = array();
 
-      // We must use strlen() as we're parsing byte by byte using strpos(), so
-      // drupal_strlen() will not work properly.
       while ($currentIndex <= strlen($line)) {
         if ($quoted) {
           $nextQuoteIndex = strpos($line, '"', $currentIndex);
@@ -257,7 +233,7 @@ class ParserCSV {
             }
             // Ok, so, on with fetching the next line, as mentioned above.
             $currentField .= "\n";
-            $line = trim($this->fixEncoding($lineIterator->current()), "\r\n");
+            $line = trim($lineIterator->current(), "\r\n");
             $currentIndex = 0;
             continue;
           }
@@ -345,38 +321,4 @@ class ParserCSV {
     }
     return $rows;
   }
-
-  /**
-   * Converts encoding of input data.
-   *
-   * @param string $data
-   *   A chunk of data.
-   *
-   * @return string
-   *   The encoded data.
-   *
-   * @throws ParserCSVEncodingException
-   *   Thrown when a given encoding does not match.
-   */
-  public function fixEncoding($data) {
-    if ($this->useMbString) {
-      if (mb_check_encoding($data, $this->fromEncoding)) {
-        if ($this->toEncoding != $this->fromEncoding) {
-          // Convert encoding. The conversion is to UTF-8 by default to prevent
-          // SQL errors.
-          $data = mb_convert_encoding($data, $this->toEncoding, $this->fromEncoding);
-        }
-      }
-      else {
-        throw new ParserCSVEncodingException(t('Source file is not in %encoding encoding.', array('%encoding' => $this->fromEncoding)));
-      }
-    }
-
-    return $data;
-  }
 }
-
-/**
- * Exception thrown when an encoding error occurs during parsing.
- */
-class ParserCSVEncodingException extends Exception {}

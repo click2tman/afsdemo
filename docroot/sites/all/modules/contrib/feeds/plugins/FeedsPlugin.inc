@@ -1,4 +1,5 @@
 <?php
+// $Id: FeedsPlugin.inc,v 1.9.2.1 2010/09/29 23:56:10 alexb Exp $
 
 /**
  * @file
@@ -20,84 +21,13 @@ class FeedsResult {}
 abstract class FeedsPlugin extends FeedsConfigurable implements FeedsSourceInterface {
 
   /**
-   * The plugin definition.
+   * Constructor.
    *
-   * @var array
-   */
-  protected $pluginDefinition;
-
-  /**
-   * Constructs a FeedsPlugin object.
-   *
-   * A copy of FeedsConfigurable::__construct() that doesn't call
-   * configDefaults() so that we avoid circular dependencies.
-   *
-   * @param string $id
-   *   The importer id.
+   * Initialize class variables.
    */
   protected function __construct($id) {
-    $this->id = $id;
-    $this->export_type = FEEDS_EXPORT_NONE;
-    $this->disabled = FALSE;
-  }
-
-  /**
-   * Instantiates a FeedsPlugin object.
-   *
-   * Don't use directly, use feeds_plugin() instead.
-   *
-   * @see feeds_plugin()
-   */
-  public static function instance($class, $id, array $plugin_definition = array()) {
-    if (!strlen($id)) {
-      throw new InvalidArgumentException(t('Empty configuration identifier.'));
-    }
-
-    $instances = &drupal_static(__METHOD__, array());
-
-    if (!isset($instances[$class][$id])) {
-      $instance = new $class($id);
-
-      // The ordering here is important. The plugin definition should be usable
-      // in getConfig().
-      $instance->setPluginDefinition($plugin_definition);
-      $instance->setConfig($instance->configDefaults());
-      $instances[$class][$id] = $instance;
-    }
-
-    return $instances[$class][$id];
-  }
-
-  /**
-   * Returns the type of plugin.
-   *
-   * @return string
-   *   One of either 'fetcher', 'parser', or 'processor'.
-   */
-  abstract public function pluginType();
-
-  /**
-   * Returns the plugin definition.
-   *
-   * @return array
-   *   The plugin definition array.
-   *
-   * @see ctools_get_plugins()
-   */
-  public function pluginDefinition() {
-    return $this->pluginDefinition;
-  }
-
-  /**
-   * Sets the plugin definition.
-   *
-   * This is protected since we're only using it in FeedsPlugin::instance().
-   *
-   * @param array $plugin_definition
-   *   The plugin definition.
-   */
-  protected function setPluginDefinition(array $plugin_definition) {
-    $this->pluginDefinition = $plugin_definition;
+    parent::__construct($id);
+    $this->source_config = $this->sourceDefaults();
   }
 
   /**
@@ -161,14 +91,14 @@ abstract class FeedsPlugin extends FeedsConfigurable implements FeedsSourceInter
    *
    * @todo: Use CTools Plugin API.
    */
-  public static function loadMappers() {
+  protected static function loadMappers() {
     static $loaded = FALSE;
     if (!$loaded) {
-      $path = drupal_get_path('module', 'feeds') . '/mappers';
+      $path = drupal_get_path('module', 'feeds') .'/mappers';
       $files = drupal_system_listing('/.*\.inc$/', $path, 'name', 0);
       foreach ($files as $file) {
         if (strstr($file->uri, '/mappers/')) {
-          require_once(DRUPAL_ROOT . '/' . $file->uri);
+          require_once("./$file->uri");
         }
       }
     }
@@ -268,102 +198,15 @@ abstract class FeedsPlugin extends FeedsConfigurable implements FeedsSourceInter
     }
     return $result;
   }
-
-  /**
-   * Implements FeedsConfigurable::dependencies().
-   */
-  public function dependencies() {
-    $dependencies = parent::dependencies();
-
-    // Find out which module provides this plugin.
-    $plugin_info = $this->pluginDefinition();
-    if (isset($plugin_info['module'])) {
-      $dependencies[$plugin_info['module']] = $plugin_info['module'];
-    }
-
-    return $dependencies;
-  }
 }
 
 /**
  * Used when a plugin is missing.
  */
 class FeedsMissingPlugin extends FeedsPlugin {
-  public function pluginType() {
-    return 'missing';
-  }
-
-  public function save() {}
-
-  /**
-   * Fetcher methods.
-   */
-  public function fetch(FeedsSource $source) {
-    return new FeedsFetcherResult('');
-  }
-
-  public function clear(FeedsSource $source) {}
-
-  public function request($feed_nid = 0) {
-    drupal_access_denied();
-  }
-
   public function menuItem() {
     return array();
   }
-
-  public function subscribe(FeedsSource $source) {}
-
-  public function unsubscribe(FeedsSource $source) {}
-
-  public function importPeriod(FeedsSource $source) {}
-
-  /**
-   * Parser methods.
-   */
-  public function parse(FeedsSource $source, FeedsFetcherResult $fetcher_result) {
-    return new FeedsParserResult();
-  }
-
-  public function getMappingSources() {
-    return array();
-  }
-
-  /**
-   * Processor methods.
-   */
-  public function process(FeedsSource $source, FeedsParserResult $parser_result) {}
-
-  public function entityType() {}
-
-  public function bundle() {}
-
-  public function bundleOptions() {
-    return array();
-  }
-
-  public function getLimit() {
-    return 0;
-  }
-
-  public function getMappings() {
-    return array();
-  }
-
-  public function getMappingTargets() {
-    return array();
-  }
-
-  public function expire(FeedsSource $source, $time = NULL) {}
-
-  public function itemCount(FeedsSource $source) {
-    return 0;
-  }
-
-  public function expiryTime() {
-    return FEEDS_EXPIRE_NEVER;
-  }
-
 }
 
 /**
