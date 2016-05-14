@@ -1,0 +1,32 @@
+<?php
+/**
+ * @file
+ * Hello World to demonstrates creating a custom page for Drupal 7.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+ 
+function helloirs_menu() {
+    $items = array();
+
+    $items['demo/hello_irs'] = array(
+        'title' => 'Hello IRS Demo Page',
+        'page callback' => 'say_hello_irs',
+        'access arguments' => array('access content'),
+        'type' => MENU_CALLBACK,
+     );
+
+    return $items;
+}
+
+function say_hello_irs() {
+    $vars = array();
+    $vars['type']="ul";
+    $vars['title'] = "";
+    $vars['attributes']=array("");
+    $vars['items'][0]="This is a hello world module to demonstrate how drupal can be extended. If you see this, it means your module is working. You can write PHP to do amazing things from this point";
+
+    return theme_item_list($vars);
+}
