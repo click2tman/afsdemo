@@ -372,7 +372,7 @@ h1#page-title {
   background:url("../img/bg-fuz.png") repeat-x scroll 0 0 #FFFFFF;
   margin:0 0 10px;
   padding:0 15px 15px;
-  border-top: 3px solid #0673AB;
+  border-top: 3px solid #ff3401;
 }
 .block h2.block-title,
 .block-twitter-pull .content h2 {
