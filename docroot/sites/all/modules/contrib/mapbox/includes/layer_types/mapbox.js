@@ -30,10 +30,10 @@ OpenLayers.Layer.MapBox = OpenLayers.Class(OpenLayers.Layer.TMS, {
             buffer: 0
         }, options);
         urls = (options.urls) ? options.urls : [
-            "http://a.tile.mapbox.com/",
-            "http://b.tile.mapbox.com/",
-            "http://c.tile.mapbox.com/",
-            "http://c.tile.mapbox.com/"
+            "http://a.tiles.mapbox.com/mapbox/",
+            "http://b.tiles.mapbox.com/mapbox/",
+            "http://c.tiles.mapbox.com/mapbox/",
+            "http://c.tiles.mapbox.com/mapbox/"
         ];
         if (options.osm) {
           options.attribution = "<a class='mapbox-branding' href='http://mapbox.com'></a> | <a href='http://mapbox.com/tos'>Terms of Service</a> | Data CCBYSA OSM"

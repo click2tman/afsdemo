@@ -1,5 +1,4 @@
 <?php
-// $Id: mapbox.styles.inc,v 1.3 2010/03/12 18:56:25 tmcw Exp $
 
 /**
  * @file
