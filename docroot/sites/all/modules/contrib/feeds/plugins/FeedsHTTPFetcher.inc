@@ -1,5 +1,4 @@
 <?php
-// $Id: FeedsHTTPFetcher.inc,v 1.29.2.2 2010/10/26 19:03:14 yhahn Exp $
 
 /**
  * @file
@@ -12,28 +11,70 @@ feeds_include_library('PuSHSubscriber.inc', 'PuSHSubscriber');
  * Result of FeedsHTTPFetcher::fetch().
  */
 class FeedsHTTPFetcherResult extends FeedsFetcherResult {
+
+  /**
+   * The URL of the feed being fetched.
+   *
+   * @var string
+   */
   protected $url;
-  protected $file_path;
+
+  /**
+   * The timeout in seconds to wait for a download.
+   *
+   * @var int
+   */
+  protected $timeout;
+
+  /**
+   *
+   * Whether to ignore SSL validation errors.
+   *
+   * @var bool
+   */
+  protected $acceptInvalidCert;
 
   /**
    * Constructor.
    */
   public function __construct($url = NULL) {
     $this->url = $url;
-    parent::__construct('');
   }
 
   /**
    * Overrides FeedsFetcherResult::getRaw();
    */
   public function getRaw() {
-    feeds_include_library('http_request.inc', 'http_request');
-    $result = http_request_get($this->url);
-    if (!in_array($result->code, array(200, 201, 202, 203, 204, 205, 206))) {
-      throw new Exception(t('Download of @url failed with code !code.', array('@url' => $this->url, '!code' => $result->code)));
+    if (!isset($this->raw)) {
+      feeds_include_library('http_request.inc', 'http_request');
+      $result = http_request_get($this->url, NULL, NULL, $this->acceptInvalidCert, $this->timeout);
+      if (!in_array($result->code, array(200, 201, 202, 203, 204, 205, 206))) {
+        throw new Exception(t('Download of @url failed with code !code.', array('@url' => $this->url, '!code' => $result->code)));
+      }
+      $this->raw = $result->data;
     }
-    return $this->sanitizeRaw($result->data);
+
+    return $this->sanitizeRaw($this->raw);
   }
+
+  public function getTimeout() {
+    return $this->timeout;
+  }
+
+  public function setTimeout($timeout) {
+    $this->timeout = $timeout;
+  }
+
+  /**
+   * Sets the accept invalid certificates option.
+   *
+   * @param bool $accept_invalid_cert
+   *   Whether to accept invalid certificates.
+   */
+  public function setAcceptInvalidCert($accept_invalid_cert) {
+    $this->acceptInvalidCert = (bool) $accept_invalid_cert;
+  }
+
 }
 
 /**
@@ -49,7 +90,11 @@ class FeedsHTTPFetcher extends FeedsFetcher {
     if ($this->config['use_pubsubhubbub'] && ($raw = $this->subscriber($source->feed_nid)->receive())) {
       return new FeedsFetcherResult($raw);
     }
-    return new FeedsHTTPFetcherResult($source_config['source']);
+    $fetcher_result = new FeedsHTTPFetcherResult($source_config['source']);
+    // When request_timeout is empty, the global value is used.
+    $fetcher_result->setTimeout($this->config['request_timeout']);
+    $fetcher_result->setAcceptInvalidCert($this->config['accept_invalid_cert']);
+    return $fetcher_result;
   }
 
   /**
@@ -79,13 +124,13 @@ class FeedsHTTPFetcher extends FeedsFetcher {
       }
       catch (Exception $e) {
         // In case of an error, respond with a 503 Service (temporary) unavailable.
-        header('HTTP/1.1 503 "Not Found"', null, 503);
-        exit();
+        header('HTTP/1.1 503 "Not Found"', NULL, 503);
+        drupal_exit();
       }
     }
     // Will generate the default 200 response.
-    header('HTTP/1.1 200 "OK"', null, 200);
-    exit();
+    header('HTTP/1.1 200 "OK"', NULL, 200);
+    drupal_exit();
   }
 
   /**
@@ -96,6 +141,9 @@ class FeedsHTTPFetcher extends FeedsFetcher {
       'auto_detect_feeds' => FALSE,
       'use_pubsubhubbub' => FALSE,
       'designated_hub' => '',
+      'request_timeout' => NULL,
+      'auto_scheme' => 'http',
+      'accept_invalid_cert' => FALSE,
     );
   }
 
@@ -116,16 +164,46 @@ class FeedsHTTPFetcher extends FeedsFetcher {
       '#description' => t('Attempt to use a <a href="http://en.wikipedia.org/wiki/PubSubHubbub">PubSubHubbub</a> subscription if available.'),
       '#default_value' => $this->config['use_pubsubhubbub'],
     );
-    $form['designated_hub'] = array(
+    $form['advanced'] = array(
+      '#title' => t('Advanced settings'),
+      '#type' => 'fieldset',
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+    );
+    $form['advanced']['auto_scheme'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Automatically add scheme'),
+      '#description' => t('If the supplied URL does not contain the scheme, use this one automatically. Keep empty to force the user to input the scheme.'),
+      '#default_value' => $this->config['auto_scheme'],
+    );
+    $form['advanced']['designated_hub'] = array(
       '#type' => 'textfield',
       '#title' => t('Designated hub'),
       '#description' => t('Enter the URL of a designated PubSubHubbub hub (e. g. superfeedr.com). If given, this hub will be used instead of the hub specified in the actual feed.'),
       '#default_value' => $this->config['designated_hub'],
-//      '#process' => array('ctools_dependent_process'),
-      '#dependency' => array(
-        'edit-use-pubsubhubbub' => array(1),
+      '#states' => array(
+        'visible' => array(':input[name="use_pubsubhubbub"]' => array('checked' => TRUE)),
       ),
     );
+    // Per importer override of global http request timeout setting.
+    $form['advanced']['request_timeout'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Request timeout'),
+      '#description' => t('Timeout in seconds to wait for an HTTP get request to finish.</br>' .
+                         '<b>Note:</b> this setting will override the global setting.</br>' .
+                         'When left empty, the global value is used.'),
+      '#default_value' => $this->config['request_timeout'],
+      '#element_validate' => array('element_validate_integer_positive'),
+      '#maxlength' => 3,
+      '#size'=> 30,
+    );
+    $form['advanced']['accept_invalid_cert'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Accept invalid SSL certificates'),
+      '#description' => t('<strong>IMPORTANT:</strong> This setting will force cURL to completely ignore all SSL errors. This is a <strong>major security risk</strong> and should only be used during development.'),
+      '#default_value' => $this->config['accept_invalid_cert'],
+    );
+
     return $form;
   }
 
@@ -149,9 +227,26 @@ class FeedsHTTPFetcher extends FeedsFetcher {
    * Override parent::sourceFormValidate().
    */
   public function sourceFormValidate(&$values) {
-    if ($this->config['auto_detect_feeds']) {
+    $values['source'] = trim($values['source']);
+
+    // Keep a copy for error messages.
+    $original_url = $values['source'];
+
+    $parts = parse_url($values['source']);
+    if (empty($parts['scheme']) && $this->config['auto_scheme']) {
+      $values['source'] = $this->config['auto_scheme'] . '://' . $values['source'];
+    }
+
+    if (!feeds_valid_url($values['source'], TRUE)) {
+      $form_key = 'feeds][' . get_class($this) . '][source';
+      form_set_error($form_key, t('The URL %source is invalid.', array('%source' => $original_url)));
+    }
+    elseif ($this->config['auto_detect_feeds']) {
       feeds_include_library('http_request.inc', 'http_request');
-      if ($url = http_request_get_common_syndication($values['source'])) {
+      $url = http_request_get_common_syndication($values['source'], array(
+        'accept_invalid_cert' => $this->config['accept_invalid_cert'],
+      ));
+      if ($url) {
         $values['source'] = $url;
       }
     }
@@ -162,7 +257,15 @@ class FeedsHTTPFetcher extends FeedsFetcher {
    */
   public function sourceSave(FeedsSource $source) {
     if ($this->config['use_pubsubhubbub']) {
-      $this->subscribe($source);
+      // If this is a feeds node we want to delay the subscription to
+      // feeds_exit() to avoid transaction race conditions.
+      if ($source->feed_nid) {
+        $job = array('fetcher' => $this, 'source' => $source);
+        feeds_set_subscription_job($job);
+      }
+      else {
+        $this->subscribe($source);
+      }
     }
   }
 
@@ -171,7 +274,20 @@ class FeedsHTTPFetcher extends FeedsFetcher {
    */
   public function sourceDelete(FeedsSource $source) {
     if ($this->config['use_pubsubhubbub']) {
-      $this->unsubscribe($source);
+      // If we're in a feed node, queue the unsubscribe,
+      // else process immediately.
+      if ($source->feed_nid) {
+        $job = array(
+          'type' => $source->id,
+          'id' => $source->feed_nid,
+          'period' => 0,
+          'periodic' => FALSE,
+        );
+        JobScheduler::get('feeds_push_unsubscribe')->set($job);
+      }
+      else {
+        $this->unsubscribe($source);
+      }
     }
   }
 
@@ -283,7 +399,7 @@ class PuSHEnvironment implements PuSHSubscriberEnvironmentInterface {
    * Implements PuSHSubscriberEnvironmentInterface::msg().
    */
   public function msg($msg, $level = 'status') {
-    drupal_set_message($msg, $level);
+    drupal_set_message(check_plain($msg), $level);
   }
 
   /**
