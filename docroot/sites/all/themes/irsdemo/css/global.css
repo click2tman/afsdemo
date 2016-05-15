@@ -4,11 +4,11 @@
  * Global/shared styles for openomega.
  */
 
-/* Handy font size definitions 
-font-size: .833em;   12px x .833   = 10px 
-font-size: .917em;   12px x .917   = 11px 
-font-size: 1em;      12px x 1      = 12px 
-font-size: 1.083em   12px x 1.083  = 13px 
+/* Handy font size definitions
+font-size: .833em;   12px x .833   = 10px
+font-size: .917em;   12px x .917   = 11px
+font-size: 1em;      12px x 1      = 12px
+font-size: 1.083em   12px x 1.083  = 13px
 font-size: 1.167em;  12px x 1.167  = 14px
 font-size: 1.25em;   12px x 1.125  = 15px
 font-size: 1.417em;  12px x 1.417  = 17px
@@ -107,7 +107,7 @@ dl dd {
 
 
 label {
-  font-weight: bold; 
+  font-weight: bold;
   margin: 5px 0 0 0;
   font-size: 1em;
   color: #333;
@@ -169,7 +169,7 @@ h4 {
   line-height:normal;
   color:#475058;
 }
-  
+
 h4 a,
 h4 a:link,
 h4 a:visited {
@@ -179,17 +179,17 @@ h4 a:visited {
 
 h5 {
   font-size:13px;
-  margin: 0 0 10px; 
+  margin: 0 0 10px;
   color: #70787f;
 }
-  
+
 h5 a,
 h5 a:link,
 h5 a:visited {
   text-decoration: none;
   color: #70787f;
 }
-  
+
 h6 {
   font-size:13px;
   margin: 0 0 10px;
@@ -202,7 +202,7 @@ h6 a:visited {
   color: #9ba1a6;
   text-decoration: none;
 }
-  
+
 h2 a:hover,
 h2 a:focus,
 h3 a:hover,
@@ -241,7 +241,7 @@ hr {}
 
 
 ul, ol {
-  margin: 20px 0; 
+  margin: 20px 0;
   padding: 0;
 }
 ul li, ol li {
@@ -265,7 +265,7 @@ body {
   background: #001B2C url("../img/bg-page.jpg") repeat-x top left ;
 }
 #page {
-  background: url("../img/bg-page-splash.jpg") no-repeat scroll center top transparent;
+  /*background: url("../img/bg-page-splash.jpg") no-repeat scroll center top transparent;*/
   min-height: 800px;
 }
 
@@ -365,7 +365,7 @@ h1#page-title {
   color:#999999;
 }
 
-/* 
+/*
  * Blocks
  */
 .block {
@@ -749,7 +749,7 @@ h1#page-title {
   width: 96%;
 }
 
-.block-search-form h2 {visibility: hidden; font-size: 1px; line-height: 0;} 
+.block-search-form h2 {visibility: hidden; font-size: 1px; line-height: 0;}
 form#search-block-form .form-text {
   float: left;
   background: url(../img/bg-form-field.png);
@@ -797,7 +797,7 @@ form#search-block-form input.form-submit {
 }
 
 .navigation ul {
-  background: #d1d1d1; 
+  background: #d1d1d1;
   background: -moz-linear-gradient(top, #f2f2f2 0%, #d1d1d1 100%);
   background: -webkit-gradient(linear, left top, left bottom, color-stop(0%,#f2f2f2), color-stop(100%,#d1d1d1));
   background: -webkit-linear-gradient(top, #f2f2f2 0%,#d1d1d1 100%);
@@ -904,7 +904,7 @@ form#search-block-form input.form-submit {
 
 
 
-/** 
+/**
   *  Overrides for OpenPublic Content Rotator
   *
   *  Setting up core feature rotator to be fluid width
@@ -1134,7 +1134,7 @@ float: left;
   color: #ffffff;
 }
 .footer-nav ul ul {
-  
+
 }
 .footer-nav ul.menu li li {
   float: left;
@@ -1225,10 +1225,10 @@ ul#user-menu a:focus {
 
 .block-openpublic-menu-current-navigation {
   padding: 0;
-  
+
 }
 .block-openpublic-menu-current-navigation h2.block-title {
-  padding: 10px 0 15px 15px; 
+  padding: 10px 0 15px 15px;
 }
 
 
