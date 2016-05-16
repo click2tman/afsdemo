@@ -1533,3 +1533,16 @@ ul.inline li.comment-add {
 ul li.leaf {
   list-style-position: inside;
 }
+.ad-banner{
+background: url("../img/bg-page-splash.jpg") no-repeat scroll center top transparent;
+text-align: center;
+min-height: 100px;
+}
+.ad-banner-inner{
+padding-top: 10px;
+padding-bottom: 10px;
+margin:0 auto;
+width: 960px;
+background:#fefefe;
+min-height:100px;
+}

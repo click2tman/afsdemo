@@ -10,14 +10,14 @@
   <div class ="breaking-news">
     <div class="clearfix">
       <h3 class="breaking-news-header">
-        <?php print t('Breaking News'); ?>
+        <?php print t('Latest News'); ?>
       </h3>
       <span class="headline">
         <?php print render($content['field_breaking_news_node'][0]);?>
       </span>
       <span class="read-more">
         <a href="<?php print $content['field_breaking_news_node'][0]['#href'] ?>">
-          <?php print t('Read More'); ?>
+          <?php print t('Learn More...'); ?>
         </a>
       </span>
     </div>
