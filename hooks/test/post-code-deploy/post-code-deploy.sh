@@ -20,46 +20,44 @@ repo_type="$6"
 if [ "$source_branch" != "$deployed_tag" ]; then
     echo "$site.$target_env: Deployed branch $source_branch as $deployed_tag."
 #Disable none production modules
-    drush @$site.$target_env dis examples
-    drush @$site.$target_env dis devel_themer
-    drush @$site.$target_env dis devel_generate
-    drush @$site.$target_env dis devel
-    drush @$site.$target_env dis admin_devel
-    drush @$site.$target_env dis field_ui
-    drush @$site.$target_env dis rules_admin
-    drush @$site.$target_env dis views_ui
-    drush @$site.$target_env dis dblog
-    drush @$site.$target_env dis feeds
-    drush @$site.$target_env dis masquerade
-    drush @$site.$target_env dis statistics
-    drush @$site.$target_env dis reroute_email
-    drush @$site.$target_env dis stage_file_proxy
+    drush @$site.$target_env pm-disable devel_themer
+    drush @$site.$target_env pm-disable devel_generate
+    drush @$site.$target_env pm-disable devel
+    drush @$site.$target_env pm-disable admin_devel
+    drush @$site.$target_env pm-disable field_ui
+    drush @$site.$target_env pm-disable rules_admin
+    drush @$site.$target_env pm-disable views_ui
+    drush @$site.$target_env pm-disable dblog
+    drush @$site.$target_env pm-disable feeds
+    drush @$site.$target_env pm-disable masquerade
+    drush @$site.$target_env pm-disable statistics
+    drush @$site.$target_env pm-disable reroute_email
+    drush @$site.$target_env pm-disable stage_file_proxy
    
 #Uninstall none production modules
-    drush @$site.$target_env pmu examples
-    drush @$site.$target_env pmu devel_themer
-    drush @$site.$target_env pmu devel_generate
-    drush @$site.$target_env pmu devel
-    drush @$site.$target_env pmu admin_devel
-    drush @$site.$target_env pmu field_ui
-    drush @$site.$target_env pmu rules_admin
-    drush @$site.$target_env pmu views_ui
-    drush @$site.$target_env pmu dblog
-    drush @$site.$target_env pmu feeds
-    drush @$site.$target_env pmu masquerade
-    drush @$site.$target_env pmu statistics
-    drush @$site.$target_env pmu reroute_email
-    drush @$site.$target_env pmu stage_file_proxy
+    drush @$site.$target_env pm-uninstall devel_themer
+    drush @$site.$target_env pm-uninstall devel_generate
+    drush @$site.$target_env pm-uninstall devel
+    drush @$site.$target_env pm-uninstall admin_devel
+    drush @$site.$target_env pm-uninstall field_ui
+    drush @$site.$target_env pm-uninstall rules_admin
+    drush @$site.$target_env pm-uninstall views_ui
+    drush @$site.$target_env pm-uninstall dblog
+    drush @$site.$target_env pm-uninstall feeds
+    drush @$site.$target_env pm-uninstall masquerade
+    drush @$site.$target_env pm-uninstall statistics
+    drush @$site.$target_env pm-uninstall reroute_email
+    drush @$site.$target_env pm-uninstall stage_file_proxy
 #Enable production modules
-    drush @$site.$target_env en honeypot
-    drush @$site.$target_env en syslog
-    drush @$site.$target_env en seckit
-    drush @$site.$target_env en securepages
-    drush @$site.$target_env en username_enumeration_prevention
-    drush @$site.$target_env en helloirs
-    drush @$site.$target_env en irs_demo_config
+    drush @$site.$target_env pm-enable honeypot
+    drush @$site.$target_env pm-enable syslog
+    drush @$site.$target_env pm-enable seckit
+    drush @$site.$target_env pm-enable securepages
+    drush @$site.$target_env pm-enable username_enumeration_prevention
+    drush @$site.$target_env pm-enable helloirs
+    drush @$site.$target_env pm-enable irs_demo_config
 #Revert features in production
-    drush @$site.$target_env fr --force -y irs_demo_config
+    drush @$site.$target_env features-revert irs_demo_config --force -y 
 #Flush caches in production
     drush @$site.$target_env cc all
 
