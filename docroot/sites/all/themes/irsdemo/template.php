@@ -276,3 +276,11 @@ function irsdemo_preprocess_file_link(&$vars) {
     $vars['file']->description = t('Download');
   }
 }
+
+// Add some cool text to the search block form
+function irsdemo_form_alter(&$form, &$form_state, $form_id) {
+  if ($form_id == 'search_block_form') {
+    // HTML5 placeholder attribute
+    $form['search_block_form']['#attributes']['placeholder'] = t('Search IRS DEMO...');
+  }
+}

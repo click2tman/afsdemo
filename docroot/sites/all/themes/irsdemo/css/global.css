@@ -1534,7 +1534,7 @@ ul li.leaf {
   list-style-position: inside;
 }
 .ad-banner{
-background: url("../img/bg-page-splash.jpg") no-repeat scroll center top transparent;
+background: #333333;
 text-align: center;
 min-height: 100px;
 }
@@ -1543,6 +1543,6 @@ padding-top: 10px;
 padding-bottom: 10px;
 margin:0 auto;
 width: 960px;
-background:#fefefe;
+background:#d1d1d1;
 min-height:100px;
 }

@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the IRS Demo Config feature.
+ */
+
+include_once 'irs_demo_config.features.inc';
